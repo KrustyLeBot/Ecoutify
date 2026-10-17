@@ -55,7 +55,7 @@ class PlaybackService : MediaSessionService() {
         if (!source.post) {
             // plain GET: ExoPlayer adds its own Range header
             return spec.buildUpon()
-                .setUri(Uri.parse(YoutubeHttp.withParams(source.url)))
+                .setUri(Uri.parse(source.url))
                 .setHttpRequestHeaders(source.headers)
                 .build()
         }

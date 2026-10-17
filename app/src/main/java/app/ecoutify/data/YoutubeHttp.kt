@@ -65,7 +65,7 @@ object YoutubeHttp {
             builder.url(withParams(src.url, start, endInclusive))
                 .post(POST_BODY.toRequestBody(FORM.toMediaType()))
         } else {
-            builder.url(withParams(src.url))
+            builder.url(src.url)
                 .header("Range", "bytes=$start-${endInclusive ?: ""}")
         }
         return builder.build()
