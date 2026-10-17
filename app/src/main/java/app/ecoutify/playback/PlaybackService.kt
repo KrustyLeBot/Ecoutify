@@ -46,21 +46,28 @@ class PlaybackService : MediaSessionService() {
         if (!host.endsWith("youtube.com") && host != "youtu.be") return spec
         val watchUrl = spec.uri.toString()
         app.store.downloadedFile(watchUrl)?.let { return spec.withUri(Uri.fromFile(it)) }
-        val streamUrl = try {
-            app.catalog.audioUrl(watchUrl)
+        val source = try {
+            app.catalog.audioSource(watchUrl)
         } catch (e: Exception) {
-            throw IOException("Impossible de résoudre le flux audio", e)
+            throw IOException(e.message ?: "Impossible de résoudre le flux audio", e)
+        }
+        if (!source.post) {
+            // plain GET: ExoPlayer adds its own Range header
+            return spec.buildUpon()
+                .setUri(Uri.parse(YoutubeHttp.withParams(source.url)))
+                .setHttpRequestHeaders(source.headers)
+                .build()
         }
         // The byte range requested by ExoPlayer goes in the URL (`range=`), as NewPipe does.
         val unset = C.LENGTH_UNSET.toLong()
         val end = if (spec.length != unset) spec.position + spec.length - 1 else null
         return spec.buildUpon()
-            .setUri(Uri.parse(YoutubeHttp.withParams(streamUrl, spec.position, end)))
+            .setUri(Uri.parse(YoutubeHttp.withParams(source.url, spec.position, end)))
             .setPosition(0)
             .setLength(unset)
             .setHttpMethod(DataSpec.HTTP_METHOD_POST)
             .setHttpBody(YoutubeHttp.POST_BODY)
-            .setHttpRequestHeaders(YoutubeHttp.headers(streamUrl))
+            .setHttpRequestHeaders(source.headers)
             .build()
     }
 

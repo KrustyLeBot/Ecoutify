@@ -32,16 +32,16 @@ class Downloads(
         scope.launch {
             var out: File? = null
             try {
-                val (streamUrl, ext) = catalog.audioStream(track.url)
-                val finalFile = store.fileFor(track, ext)
+                val source = catalog.audioSource(track.url)
+                val finalFile = store.fileFor(track, source.ext)
                 out = File(finalFile.parentFile, finalFile.name + ".part")
-                val total = Regex("[?&]clen=(\\d+)").find(streamUrl)?.groupValues?.get(1)?.toLongOrNull()
+                val total = Regex("[?&]clen=(\\d+)").find(source.url)?.groupValues?.get(1)?.toLongOrNull()
                 out.outputStream().use { output ->
                     var done = 0L
                     var lastPct = -1
                     while (total == null || done < total) {
                         val end = if (total != null) minOf(done + CHUNK, total) - 1 else null
-                        client.newCall(YoutubeHttp.request(streamUrl, done, end)).execute().use { resp ->
+                        client.newCall(YoutubeHttp.request(source, done, end)).execute().use { resp ->
                             check(resp.isSuccessful) { "HTTP ${resp.code}" }
                             val body = resp.body ?: error("Réponse vide")
                             val buf = ByteArray(64 * 1024)
