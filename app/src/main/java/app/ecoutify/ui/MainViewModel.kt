@@ -5,6 +5,7 @@ import android.net.ConnectivityManager
 import android.net.Network
 import android.net.NetworkCapabilities
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.AndroidViewModel
@@ -30,6 +31,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val player = PlayerConnection(application, app, isOnline = ::checkOnline) { message = it }
 
     var query by mutableStateOf("")
+    /** Incremented each time text is shared to the app, so the UI can jump to the search tab. */
+    var shareRequest by mutableIntStateOf(0)
+        private set
     var results by mutableStateOf<List<Track>>(emptyList())
         private set
     var searching by mutableStateOf(false)
@@ -101,6 +105,15 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 searching = false
             }
         }
+    }
+
+    /** Searches for text shared from another app (links and the " - " separator are dropped). */
+    fun searchShared(raw: String) {
+        val cleaned = raw.replace(Regex("https?://\\S+"), " ").replace(" - ", " ").replace(Regex("\\s+"), " ").trim()
+        if (cleaned.isEmpty()) return
+        query = cleaned
+        shareRequest++
+        search()
     }
 
     fun refreshRecommendations() {

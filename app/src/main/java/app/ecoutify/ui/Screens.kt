@@ -67,6 +67,12 @@ fun EcoutifyScreen(vm: MainViewModel) {
             vm.message = null
         }
     }
+    LaunchedEffect(vm.shareRequest) {
+        if (vm.shareRequest > 0) {
+            tab = Tab.Search
+            showPlayer = false
+        }
+    }
     BackHandler(enabled = showPlayer) { showPlayer = false }
     BackHandler(enabled = !showPlayer && tab == Tab.Library && openList != null) { openList = null }
 
