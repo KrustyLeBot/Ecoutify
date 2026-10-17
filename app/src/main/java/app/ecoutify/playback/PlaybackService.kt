@@ -13,12 +13,13 @@ import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaSessionService
 import app.ecoutify.EcoutifyApp
 import app.ecoutify.data.OkHttpDownloader
+import app.ecoutify.data.YoutubeHttp
 import java.io.IOException
 
 /**
  * Lecture en arrière-plan avec notification et contrôles écran verrouillé.
- * Chaque MediaItem a pour URI l'URL « watch » YouTube ; elle est résolue en flux audio
- * (ou en fichier local si le morceau est téléchargé) au moment de la lecture.
+ * Chaque MediaItem a pour URI l'URL « watch » YouTube ; elle est résolue en fichier local
+ * si le morceau est téléchargé, sinon en flux audio direct au moment de la lecture.
  */
 class PlaybackService : MediaSessionService() {
     private var session: MediaSession? = null
@@ -45,11 +46,22 @@ class PlaybackService : MediaSessionService() {
         if (!host.endsWith("youtube.com") && host != "youtu.be") return spec
         val watchUrl = spec.uri.toString()
         app.store.downloadedFile(watchUrl)?.let { return spec.withUri(Uri.fromFile(it)) }
-        try {
-            return spec.withUri(Uri.parse(app.catalog.audioUrl(watchUrl)))
+        val streamUrl = try {
+            app.catalog.audioUrl(watchUrl)
         } catch (e: Exception) {
             throw IOException("Impossible de résoudre le flux audio", e)
         }
+        // La plage demandée par ExoPlayer passe dans l'URL (`range=`), comme le fait NewPipe.
+        val unset = C.LENGTH_UNSET.toLong()
+        val end = if (spec.length != unset) spec.position + spec.length - 1 else null
+        return spec.buildUpon()
+            .setUri(Uri.parse(YoutubeHttp.withParams(streamUrl, spec.position, end)))
+            .setPosition(0)
+            .setLength(unset)
+            .setHttpMethod(DataSpec.HTTP_METHOD_POST)
+            .setHttpBody(YoutubeHttp.POST_BODY)
+            .setHttpRequestHeaders(YoutubeHttp.headers(streamUrl))
+            .build()
     }
 
     override fun onGetSession(controllerInfo: MediaSession.ControllerInfo) = session

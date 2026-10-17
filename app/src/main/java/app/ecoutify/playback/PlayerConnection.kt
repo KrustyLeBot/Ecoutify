@@ -2,47 +2,75 @@ package app.ecoutify.playback
 
 import android.content.ComponentName
 import android.content.Context
-import android.net.Uri
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.core.content.ContextCompat
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
+import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
 import app.ecoutify.EcoutifyApp
 import app.ecoutify.data.Track
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 
-/** Côté UI : pilote le service de lecture et expose l'état observable par Compose. */
-class PlayerConnection(context: Context, private val app: EcoutifyApp) {
+/**
+ * Côté UI : pilote le service de lecture et expose l'état observable par Compose.
+ * La file est simplement la liste d'où on lance le titre ; aléatoire et répétition sont ceux d'ExoPlayer.
+ */
+class PlayerConnection(
+    context: Context,
+    private val app: EcoutifyApp,
+    private val isOnline: () -> Boolean,
+    private val onMessage: (String) -> Unit,
+) {
     var current by mutableStateOf<Track?>(null)
         private set
     var isPlaying by mutableStateOf(false)
         private set
+    var shuffle by mutableStateOf(app.store.shuffle)
+        private set
+    var repeat by mutableIntStateOf(app.store.repeat)
+        private set
 
     private var controller: MediaController? = null
-    private var pending: (() -> Unit)? = null
-    private val tracks = HashMap<String, Track>()
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
+    private var pending: ((MediaController) -> Unit)? = null
+    private var errorStreak = 0
 
     private val listener = object : Player.Listener {
         override fun onIsPlayingChanged(playing: Boolean) {
             isPlaying = playing
         }
 
+        override fun onPlaybackStateChanged(state: Int) {
+            if (state == Player.STATE_READY) errorStreak = 0
+        }
+
         override fun onMediaItemTransition(item: MediaItem?, reason: Int) {
-            val track = item?.mediaId?.let { tracks[it] }
-            current = track
-            if (track != null) {
-                app.store.addToHistory(track)
-                maybeAutoplay()
+            current = item?.let(::trackOf)
+            current?.let { app.store.addToHistory(it) }
+        }
+
+        override fun onShuffleModeEnabledChanged(enabled: Boolean) {
+            shuffle = enabled
+        }
+
+        override fun onRepeatModeChanged(mode: Int) {
+            repeat = mode
+        }
+
+        override fun onPlayerError(error: PlaybackException) {
+            val c = controller ?: return
+            errorStreak++
+            if (errorStreak <= 5 && c.hasNextMediaItem()) {
+                onMessage("Titre illisible, passage au suivant")
+                c.seekToNextMediaItem()
+                c.prepare()
+                c.play()
+            } else {
+                onMessage("Lecture impossible (${error.errorCodeName}). Vérifie ta connexion ou télécharge le titre.")
             }
         }
     }
@@ -54,22 +82,41 @@ class PlayerConnection(context: Context, private val app: EcoutifyApp) {
             val c = future.get()
             controller = c
             c.addListener(listener)
+            if (c.mediaItemCount == 0) {
+                c.shuffleModeEnabled = shuffle
+                c.repeatMode = repeat
+            } else {
+                shuffle = c.shuffleModeEnabled
+                repeat = c.repeatMode
+            }
             isPlaying = c.isPlaying
-            current = c.currentMediaItem?.mediaId?.let { tracks[it] }
-            pending?.invoke()
+            current = c.currentMediaItem?.let(::trackOf)
+            pending?.invoke(c)
             pending = null
         }, ContextCompat.getMainExecutor(context))
     }
 
+    /** Joue [queue] à partir de [index]. Hors ligne, seuls les titres téléchargés restent dans la file. */
     fun play(queue: List<Track>, index: Int) {
-        val action = {
-            val c = controller!!
-            queue.forEach { tracks[it.url] = it }
-            c.setMediaItems(queue.map(::mediaItem), index, 0L)
+        val tapped = queue.getOrNull(index) ?: return
+        val playable = if (isOnline()) queue else queue.filter { app.store.downloadedFile(it.url) != null }
+        val start = playable.indexOfFirst { it.url == tapped.url }
+        if (start < 0) {
+            onMessage("Hors ligne : ce titre n'est pas téléchargé")
+            return
+        }
+        val action = { c: MediaController ->
+            c.setMediaItems(playable.map(::mediaItem), start, 0L)
             c.prepare()
             c.play()
         }
-        if (controller == null) pending = action else action()
+        controller?.let(action) ?: run { pending = action }
+    }
+
+    fun playShuffled(queue: List<Track>) {
+        if (queue.isEmpty()) return
+        setShuffle(true)
+        play(queue, queue.indices.random())
     }
 
     fun togglePlay() {
@@ -77,35 +124,44 @@ class PlayerConnection(context: Context, private val app: EcoutifyApp) {
     }
 
     fun next() { controller?.seekToNextMediaItem() }
-    fun previous() { controller?.seekToPreviousMediaItem() }
+
+    fun previous() {
+        controller?.let { if (it.currentPosition > 3000) it.seekTo(0) else it.seekToPreviousMediaItem() }
+    }
+
     fun seekTo(ms: Long) { controller?.seekTo(ms) }
+
+    fun setShuffle(on: Boolean) {
+        app.store.shuffle = on
+        shuffle = on
+        controller?.shuffleModeEnabled = on
+    }
+
+    fun cycleRepeat() {
+        val next = when (repeat) {
+            Player.REPEAT_MODE_OFF -> Player.REPEAT_MODE_ALL
+            Player.REPEAT_MODE_ALL -> Player.REPEAT_MODE_ONE
+            else -> Player.REPEAT_MODE_OFF
+        }
+        app.store.repeat = next
+        repeat = next
+        controller?.repeatMode = next
+    }
+
     val positionMs: Long get() = controller?.currentPosition ?: 0L
     val durationMs: Long get() = controller?.duration?.takeIf { it > 0 } ?: 0L
 
-    /** Fin de file atteinte : on ajoute des titres similaires, pour une écoute continue (« radio »). */
-    private fun maybeAutoplay() {
-        val c = controller ?: return
-        val last = c.currentMediaItemIndex == c.mediaItemCount - 1
-        val url = c.currentMediaItem?.mediaId ?: return
-        if (!last) return
-        scope.launch {
-            val similar = runCatching { withContext(Dispatchers.IO) { app.catalog.related(url) } }.getOrNull() ?: return@launch
-            val queued = (0 until c.mediaItemCount).map { c.getMediaItemAt(it).mediaId }.toSet()
-            val fresh = similar.filter { it.url !in queued }.take(15)
-            fresh.forEach { tracks[it.url] = it }
-            c.addMediaItems(fresh.map(::mediaItem))
-        }
-    }
+    private fun trackOf(item: MediaItem) = Track(
+        url = item.mediaId,
+        title = item.mediaMetadata.title?.toString().orEmpty(),
+        artist = item.mediaMetadata.artist?.toString().orEmpty(),
+        durationSec = 0,
+        thumbnail = null,
+    )
 
     private fun mediaItem(t: Track) = MediaItem.Builder()
         .setMediaId(t.url)
         .setUri(t.url)
-        .setMediaMetadata(
-            MediaMetadata.Builder()
-                .setTitle(t.title)
-                .setArtist(t.artist)
-                .setArtworkUri(t.thumbnail?.let(Uri::parse))
-                .build()
-        )
+        .setMediaMetadata(MediaMetadata.Builder().setTitle(t.title).setArtist(t.artist).build())
         .build()
 }

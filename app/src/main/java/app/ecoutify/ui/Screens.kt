@@ -1,214 +1,505 @@
 package app.ecoutify.ui
 
+import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.media3.common.Player
+import app.ecoutify.data.Playlist
 import app.ecoutify.data.Track
-import coil3.compose.AsyncImage
 import kotlinx.coroutines.delay
 
-@Composable
-fun EcoutifyTheme(content: @Composable () -> Unit) {
-    val dark = androidx.compose.foundation.isSystemInDarkTheme()
-    MaterialTheme(
-        colorScheme = if (dark) darkColorScheme() else lightColorScheme(),
-        content = content,
-    )
-}
+private const val DOWNLOADS_ID = "__downloads__"
 
-private enum class Tab(val label: String, val icon: androidx.compose.ui.graphics.vector.ImageVector) {
-    Home("Pour toi", Icons.Default.Home),
+private enum class Tab(val label: String, val icon: ImageVector) {
+    Home("Pour toi", Icons.Default.AutoAwesome),
     Search("Recherche", Icons.Default.Search),
-    Library("Hors ligne", Icons.Default.DownloadForOffline),
+    Library("Bibliothèque", Icons.Default.LibraryMusic),
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+private fun formatTime(ms: Long): String {
+    val s = (ms / 1000).coerceAtLeast(0)
+    return "%d:%02d".format(s / 60, s % 60)
+}
+
 @Composable
 fun EcoutifyScreen(vm: MainViewModel) {
-    var tab by remember { mutableStateOf(Tab.Home) }
+    var tab by rememberSaveable { mutableStateOf(Tab.Home) }
+    var openList by rememberSaveable { mutableStateOf<String?>(null) }
+    var showPlayer by rememberSaveable { mutableStateOf(false) }
     val snackbar = remember { SnackbarHostState() }
+
     LaunchedEffect(vm.message) {
-        vm.message?.let { snackbar.showSnackbar(it); vm.message = null }
-    }
-    Scaffold(
-        snackbarHost = { SnackbarHost(snackbar) },
-        bottomBar = {
-            Column {
-                MiniPlayer(vm)
-                NavigationBar {
-                    Tab.entries.forEach {
-                        NavigationBarItem(
-                            selected = tab == it,
-                            onClick = { tab = it },
-                            icon = { Icon(it.icon, it.label) },
-                            label = { Text(it.label) },
-                        )
-                    }
-                }
-            }
-        },
-    ) { padding ->
-        Box(Modifier.padding(padding).fillMaxSize()) {
-            when (tab) {
-                Tab.Home -> HomeScreen(vm)
-                Tab.Search -> SearchScreen(vm)
-                Tab.Library -> LibraryScreen(vm)
-            }
+        vm.message?.let {
+            snackbar.showSnackbar(it)
+            vm.message = null
         }
     }
+    BackHandler(enabled = showPlayer) { showPlayer = false }
+    BackHandler(enabled = !showPlayer && tab == Tab.Library && openList != null) { openList = null }
+
+    Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
+        Scaffold(
+            containerColor = Color.Transparent,
+            snackbarHost = { SnackbarHost(snackbar) },
+            bottomBar = {
+                Column {
+                    MiniPlayer(vm, onOpen = { showPlayer = true })
+                    NavigationBar(containerColor = MaterialTheme.colorScheme.surfaceContainer) {
+                        Tab.entries.forEach {
+                            NavigationBarItem(
+                                selected = tab == it,
+                                onClick = {
+                                    if (tab == it && it == Tab.Library) openList = null
+                                    tab = it
+                                },
+                                icon = { Icon(it.icon, it.label) },
+                                label = { Text(it.label) },
+                            )
+                        }
+                    }
+                }
+            },
+        ) { padding ->
+            Column(Modifier.padding(padding).fillMaxSize()) {
+                if (!vm.online) OfflineBanner()
+                when (tab) {
+                    Tab.Home -> HomeScreen(vm)
+                    Tab.Search -> SearchScreen(vm)
+                    Tab.Library -> LibraryScreen(vm, openList) { openList = it }
+                }
+            }
+        }
+        if (showPlayer) PlayerScreen(vm, onClose = { showPlayer = false })
+    }
 }
+
+@Composable
+private fun OfflineBanner() {
+    Row(
+        Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.primaryContainer)
+            .padding(horizontal = 16.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(Icons.Default.WifiOff, null, Modifier.size(18.dp))
+        Spacer(Modifier.width(8.dp))
+        Text("Hors ligne — seuls les titres téléchargés sont lisibles", style = MaterialTheme.typography.bodySmall)
+    }
+}
+
+@Composable
+private fun ScreenTitle(title: String, subtitle: String? = null, actions: @Composable RowScope.() -> Unit = {}) {
+    Row(
+        Modifier.fillMaxWidth().padding(start = 20.dp, end = 8.dp, top = 20.dp, bottom = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text(title, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+            if (subtitle != null) {
+                Text(subtitle, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
+        actions()
+    }
+}
+
+// ---------------------------------------------------------------- Pour toi
 
 @Composable
 private fun HomeScreen(vm: MainViewModel) {
     Column(Modifier.fillMaxSize()) {
-        Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text("Pour toi", style = MaterialTheme.typography.headlineSmall, modifier = Modifier.weight(1f))
-            IconButton(onClick = vm::refreshRecommendations) { Icon(Icons.Default.Refresh, "Actualiser") }
+        ScreenTitle(
+            "Pour toi",
+            if (vm.downloaded.isEmpty()) "Télécharge des titres pour affiner les suggestions" else "D'après tes titres et tes playlists",
+        ) {
+            IconButton(onClick = vm::refreshRecommendations, enabled = vm.online) {
+                Icon(Icons.Default.Refresh, "Actualiser")
+            }
         }
         if (vm.loadingRecs) LinearProgressIndicator(Modifier.fillMaxWidth())
+        if (vm.recommendations.isEmpty() && !vm.loadingRecs) {
+            EmptyHint(if (vm.online) "Aucune suggestion pour l'instant." else "Les suggestions reviendront avec la connexion.")
+        }
         TrackList(vm, vm.recommendations)
     }
 }
 
+// ---------------------------------------------------------------- Recherche
+
 @Composable
 private fun SearchScreen(vm: MainViewModel) {
     Column(Modifier.fillMaxSize()) {
+        ScreenTitle("Recherche")
         OutlinedTextField(
             value = vm.query,
             onValueChange = { vm.query = it },
-            modifier = Modifier.fillMaxWidth().padding(16.dp),
-            placeholder = { Text("Titre, artiste, album…") },
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+            placeholder = { Text("Titre, artiste…") },
             singleLine = true,
+            shape = RoundedCornerShape(28.dp),
             leadingIcon = { Icon(Icons.Default.Search, null) },
+            trailingIcon = {
+                if (vm.query.isNotEmpty()) {
+                    IconButton(onClick = { vm.query = "" }) { Icon(Icons.Default.Close, "Effacer") }
+                }
+            },
             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
             keyboardActions = KeyboardActions(onSearch = { vm.search() }),
         )
+        Spacer(Modifier.height(8.dp))
         if (vm.searching) LinearProgressIndicator(Modifier.fillMaxWidth())
+        if (!vm.online) EmptyHint("La recherche nécessite une connexion.")
         TrackList(vm, vm.results)
     }
 }
 
+// ---------------------------------------------------------------- Bibliothèque
+
 @Composable
-private fun LibraryScreen(vm: MainViewModel) {
+private fun LibraryScreen(vm: MainViewModel, openList: String?, setOpen: (String?) -> Unit) {
+    val playlist = vm.playlists.firstOrNull { it.id == openList }
+    when {
+        openList == DOWNLOADS_ID -> ListDetail(vm, "Téléchargés", vm.downloaded, null, setOpen)
+        playlist != null -> ListDetail(vm, playlist.name, playlist.tracks, playlist, setOpen)
+        else -> LibraryHome(vm, setOpen)
+    }
+}
+
+@Composable
+private fun LibraryHome(vm: MainViewModel, setOpen: (String?) -> Unit) {
+    var creating by remember { mutableStateOf(false) }
+    var toDelete by remember { mutableStateOf<Playlist?>(null) }
     Column(Modifier.fillMaxSize()) {
-        Text("Téléchargés", style = MaterialTheme.typography.headlineSmall, modifier = Modifier.padding(16.dp))
-        if (vm.downloaded.isEmpty()) {
-            Text("Rien ici pour l'instant. Utilise ⬇ sur un titre pour l'écouter hors ligne.", Modifier.padding(16.dp))
+        ScreenTitle("Bibliothèque") {
+            IconButton(onClick = { creating = true }) { Icon(Icons.Default.Add, "Nouvelle playlist") }
         }
-        TrackList(vm, vm.downloaded, offline = true)
+        LazyColumn(Modifier.fillMaxSize()) {
+            item {
+                LibraryRow(
+                    icon = Icons.Default.DownloadDone, tint = Mint,
+                    title = "Téléchargés", subtitle = "${vm.downloaded.size} titres · écoute hors ligne",
+                    onClick = { setOpen(DOWNLOADS_ID) },
+                )
+            }
+            items(vm.playlists, key = { it.id }) { p ->
+                LibraryRow(
+                    icon = Icons.Default.LibraryMusic, tint = MaterialTheme.colorScheme.primary,
+                    title = p.name,
+                    subtitle = "${p.tracks.size} titres · ${p.tracks.count(vm::isDownloaded)} hors ligne",
+                    onClick = { setOpen(p.id) },
+                    onLongClick = { toDelete = p },
+                )
+            }
+            if (vm.playlists.isEmpty()) {
+                item { EmptyHint("Crée une playlist avec + ou depuis le menu ⋮ d'un titre.") }
+            }
+        }
+    }
+    if (creating) NameDialog("Nouvelle playlist", onDismiss = { creating = false }) { vm.createPlaylist(it) }
+    toDelete?.let { p ->
+        AlertDialog(
+            onDismissRequest = { toDelete = null },
+            title = { Text("Supprimer « ${p.name} » ?") },
+            text = { Text("Les titres téléchargés restent sur le téléphone.") },
+            confirmButton = { TextButton(onClick = { vm.deletePlaylist(p); toDelete = null }) { Text("Supprimer") } },
+            dismissButton = { TextButton(onClick = { toDelete = null }) { Text("Annuler") } },
+        )
     }
 }
 
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
-private fun TrackList(vm: MainViewModel, tracks: List<Track>, offline: Boolean = false) {
-    LazyColumn(Modifier.fillMaxSize()) {
-        itemsIndexed(tracks, key = { i, t -> "${t.url}#$i" }) { index, track ->
-            val isDownloaded = vm.downloaded.any { it.url == track.url }
-            TrackRow(
-                track = track,
-                playing = vm.player.current?.url == track.url,
-                downloadProgress = vm.downloading[track.url],
-                downloaded = isDownloaded,
-                onClick = { vm.play(tracks, index) },
-                onRadio = { vm.radio(track) },
-                onDownload = { if (offline) vm.deleteDownload(track) else vm.download(track) },
-                offline = offline,
-            )
-        }
-    }
-}
-
-@Composable
-private fun TrackRow(
-    track: Track,
-    playing: Boolean,
-    downloadProgress: Int?,
-    downloaded: Boolean,
-    offline: Boolean,
-    onClick: () -> Unit,
-    onRadio: () -> Unit,
-    onDownload: () -> Unit,
+private fun LibraryRow(
+    icon: ImageVector, tint: Color, title: String, subtitle: String,
+    onClick: () -> Unit, onLongClick: (() -> Unit)? = null,
 ) {
     Row(
-        Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 16.dp, vertical = 8.dp),
+        Modifier.fillMaxWidth()
+            .combinedClickable(onClick = onClick, onLongClick = onLongClick)
+            .padding(horizontal = 20.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        AsyncImage(
-            model = track.thumbnail,
-            contentDescription = null,
-            contentScale = ContentScale.Crop,
-            modifier = Modifier.size(52.dp).clip(RoundedCornerShape(6.dp)),
-        )
+        Box(
+            Modifier.size(48.dp).clip(RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.surfaceContainerHigh),
+            contentAlignment = Alignment.Center,
+        ) { Icon(icon, null, tint = tint) }
+        Spacer(Modifier.width(16.dp))
+        Column(Modifier.weight(1f)) {
+            Text(title, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        Icon(Icons.Default.ChevronRight, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+}
+
+@Composable
+private fun ListDetail(vm: MainViewModel, title: String, tracks: List<Track>, playlist: Playlist?, setOpen: (String?) -> Unit) {
+    Column(Modifier.fillMaxSize()) {
+        Row(Modifier.fillMaxWidth().padding(start = 4.dp, top = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+            IconButton(onClick = { setOpen(null) }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Retour") }
+            Text(title, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
+        Row(Modifier.padding(horizontal = 16.dp, vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Button(onClick = { vm.play(tracks, 0) }, enabled = tracks.isNotEmpty()) {
+                Icon(Icons.Default.PlayArrow, null); Spacer(Modifier.width(4.dp)); Text("Lecture")
+            }
+            FilledTonalButton(onClick = { vm.playShuffled(tracks) }, enabled = tracks.isNotEmpty()) {
+                Icon(Icons.Default.Shuffle, null); Spacer(Modifier.width(4.dp)); Text("Aléatoire")
+            }
+            if (playlist != null) {
+                IconButton(onClick = { vm.downloadAll(tracks) }, enabled = tracks.any { !vm.isDownloaded(it) }) {
+                    Icon(Icons.Default.Download, "Tout télécharger")
+                }
+            }
+        }
+        if (tracks.isEmpty()) EmptyHint(if (playlist != null) "Playlist vide. Ajoute des titres depuis le menu ⋮." else "Aucun titre téléchargé.")
+        TrackList(vm, tracks, playlist = playlist)
+    }
+}
+
+// ---------------------------------------------------------------- Liste de titres
+
+@Composable
+private fun EmptyHint(text: String) {
+    Text(text, Modifier.padding(horizontal = 20.dp, vertical = 16.dp), color = MaterialTheme.colorScheme.onSurfaceVariant)
+}
+
+@Composable
+private fun TrackList(vm: MainViewModel, tracks: List<Track>, playlist: Playlist? = null) {
+    LazyColumn(Modifier.fillMaxSize()) {
+        itemsIndexed(tracks, key = { i, t -> "${t.url}#$i" }) { index, track ->
+            TrackRow(vm, track, tracks, index, playlist)
+        }
+    }
+}
+
+@Composable
+private fun TrackRow(vm: MainViewModel, track: Track, queue: List<Track>, index: Int, playlist: Playlist?) {
+    val downloaded = vm.isDownloaded(track)
+    val progress = vm.downloading[track.url]
+    val playing = vm.player.current?.url == track.url
+    val unavailable = !vm.online && !downloaded
+    var menu by remember { mutableStateOf(false) }
+    var picking by remember { mutableStateOf(false) }
+
+    Row(
+        Modifier.fillMaxWidth()
+            .alpha(if (unavailable) 0.4f else 1f)
+            .clickable { vm.play(queue, index) }
+            .padding(start = 20.dp, top = 6.dp, bottom = 6.dp, end = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(Modifier.size(24.dp), contentAlignment = Alignment.Center) {
+            if (playing) Icon(Icons.Default.GraphicEq, "En lecture", tint = MaterialTheme.colorScheme.primary)
+        }
         Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f)) {
             Text(
                 track.title, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                style = MaterialTheme.typography.bodyLarge,
                 color = if (playing) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
             )
             Text(
-                track.artist, maxLines = 1, overflow = TextOverflow.Ellipsis,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                listOf(track.artist, if (track.durationSec > 0) formatTime(track.durationSec * 1000) else "")
+                    .filter { it.isNotBlank() }.joinToString(" · "),
+                maxLines = 1, overflow = TextOverflow.Ellipsis,
+                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
-        IconButton(onClick = onRadio) { Icon(Icons.Default.Radio, "Titres similaires") }
         when {
-            downloadProgress != null -> CircularProgressIndicator(
-                progress = { downloadProgress / 100f }, modifier = Modifier.size(24.dp), strokeWidth = 2.dp,
+            progress != null -> CircularProgressIndicator(
+                progress = { progress / 100f }, modifier = Modifier.size(20.dp), strokeWidth = 2.dp,
             )
-            offline -> IconButton(onClick = onDownload) { Icon(Icons.Default.Delete, "Supprimer") }
-            downloaded -> Icon(Icons.Default.DownloadDone, "Téléchargé", Modifier.padding(12.dp))
-            else -> IconButton(onClick = onDownload) { Icon(Icons.Default.Download, "Télécharger") }
+            downloaded -> Icon(Icons.Default.DownloadDone, "Téléchargé", tint = Mint, modifier = Modifier.size(20.dp))
+        }
+        Box {
+            IconButton(onClick = { menu = true }) { Icon(Icons.Default.MoreVert, "Options") }
+            DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                DropdownMenuItem(text = { Text("Ajouter à une playlist") }, onClick = { menu = false; picking = true })
+                if (downloaded) {
+                    DropdownMenuItem(text = { Text("Supprimer le téléchargement") }, onClick = { menu = false; vm.deleteDownload(track) })
+                } else {
+                    DropdownMenuItem(text = { Text("Télécharger") }, onClick = { menu = false; vm.download(track) })
+                }
+                if (playlist != null) {
+                    DropdownMenuItem(text = { Text("Retirer de la playlist") }, onClick = { menu = false; vm.removeFromPlaylist(playlist, track) })
+                }
+            }
+        }
+    }
+    if (picking) PlaylistPicker(vm, track) { picking = false }
+}
+
+@Composable
+private fun PlaylistPicker(vm: MainViewModel, track: Track, onDismiss: () -> Unit) {
+    var creating by remember { mutableStateOf(false) }
+    if (creating) {
+        NameDialog("Nouvelle playlist", onDismiss = onDismiss) { vm.createPlaylist(it, thenAdd = track) }
+        return
+    }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Ajouter à…") },
+        text = {
+            Column {
+                vm.playlists.forEach { p ->
+                    TextButton(onClick = { vm.addToPlaylist(p, track); onDismiss() }, modifier = Modifier.fillMaxWidth()) {
+                        Text(p.name, modifier = Modifier.fillMaxWidth())
+                    }
+                }
+                TextButton(onClick = { creating = true }, modifier = Modifier.fillMaxWidth()) {
+                    Icon(Icons.Default.Add, null); Spacer(Modifier.width(8.dp))
+                    Text("Nouvelle playlist", modifier = Modifier.weight(1f))
+                }
+            }
+        },
+        confirmButton = {},
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Annuler") } },
+    )
+}
+
+@Composable
+private fun NameDialog(title: String, onDismiss: () -> Unit, onConfirm: (String) -> Unit) {
+    var name by remember { mutableStateOf("") }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(title) },
+        text = { OutlinedTextField(name, { name = it }, singleLine = true, placeholder = { Text("Nom") }) },
+        confirmButton = {
+            TextButton(onClick = { onConfirm(name); onDismiss() }, enabled = name.isNotBlank()) { Text("Créer") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Annuler") } },
+    )
+}
+
+// ---------------------------------------------------------------- Lecteur
+
+@Composable
+private fun rememberProgress(vm: MainViewModel): State<Pair<Long, Long>> {
+    val state = remember { mutableStateOf(0L to 0L) }
+    val track = vm.player.current
+    LaunchedEffect(track, vm.player.isPlaying) {
+        while (true) {
+            state.value = vm.player.positionMs to vm.player.durationMs
+            delay(500)
+        }
+    }
+    return state
+}
+
+@Composable
+private fun MiniPlayer(vm: MainViewModel, onOpen: () -> Unit) {
+    val player = vm.player
+    val track = player.current ?: return
+    val (pos, dur) = rememberProgress(vm).value
+    Surface(color = MaterialTheme.colorScheme.surfaceContainerHigh, modifier = Modifier.clickable(onClick = onOpen)) {
+        Column {
+            LinearProgressIndicator(
+                progress = { if (dur > 0) pos.toFloat() / dur else 0f },
+                modifier = Modifier.fillMaxWidth().height(2.dp),
+            )
+            Row(Modifier.fillMaxWidth().padding(start = 20.dp, end = 4.dp, top = 4.dp, bottom = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text(track.title, maxLines = 1, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.Medium)
+                    Text(track.artist, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                IconButton(onClick = player::togglePlay) {
+                    Icon(if (player.isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow, "Lecture/pause", Modifier.size(30.dp))
+                }
+                IconButton(onClick = player::next) { Icon(Icons.Default.SkipNext, "Suivant") }
+            }
         }
     }
 }
 
 @Composable
-private fun MiniPlayer(vm: MainViewModel) {
+private fun PlayerScreen(vm: MainViewModel, onClose: () -> Unit) {
     val player = vm.player
-    val track = player.current ?: return
-    var progress by remember { mutableFloatStateOf(0f) }
-    LaunchedEffect(track, player.isPlaying) {
-        while (true) {
-            val d = player.durationMs
-            progress = if (d > 0) player.positionMs.toFloat() / d else 0f
-            delay(500)
+    val track = player.current
+    val (pos, dur) = rememberProgress(vm).value
+    var dragging by remember { mutableStateOf<Float?>(null) }
+    val accent = MaterialTheme.colorScheme.primary
+    val dim = MaterialTheme.colorScheme.onSurfaceVariant
+
+    Column(
+        Modifier.fillMaxSize()
+            .background(Brush.verticalGradient(listOf(Color(0xFF2B2554), MaterialTheme.colorScheme.background)))
+            .systemBarsPadding()
+            .padding(horizontal = 24.dp),
+    ) {
+        IconButton(onClick = onClose, Modifier.padding(top = 8.dp)) {
+            Icon(Icons.Default.KeyboardArrowDown, "Fermer", Modifier.size(32.dp))
         }
-    }
-    Surface(tonalElevation = 3.dp) {
-        Column {
-            LinearProgressIndicator(progress = { progress }, modifier = Modifier.fillMaxWidth())
-            Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-                AsyncImage(
-                    model = track.thumbnail, contentDescription = null, contentScale = ContentScale.Crop,
-                    modifier = Modifier.size(44.dp).clip(RoundedCornerShape(6.dp)),
+        Spacer(Modifier.weight(1f))
+        Text(
+            track?.title ?: "Rien en lecture", style = MaterialTheme.typography.headlineMedium,
+            fontWeight = FontWeight.Bold, maxLines = 3, overflow = TextOverflow.Ellipsis,
+        )
+        Spacer(Modifier.height(6.dp))
+        Text(track?.artist.orEmpty(), style = MaterialTheme.typography.titleMedium, color = dim, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Spacer(Modifier.height(28.dp))
+        Slider(
+            value = dragging ?: if (dur > 0) (pos.toFloat() / dur).coerceIn(0f, 1f) else 0f,
+            onValueChange = { dragging = it },
+            onValueChangeFinished = { dragging?.let { player.seekTo((it * dur).toLong()) }; dragging = null },
+            enabled = dur > 0,
+        )
+        Row(Modifier.fillMaxWidth()) {
+            Text(formatTime(dragging?.let { (it * dur).toLong() } ?: pos), style = MaterialTheme.typography.bodySmall, color = dim)
+            Spacer(Modifier.weight(1f))
+            Text(formatTime(dur), style = MaterialTheme.typography.bodySmall, color = dim)
+        }
+        Spacer(Modifier.height(16.dp))
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+            IconButton(onClick = { player.setShuffle(!player.shuffle) }) {
+                Icon(Icons.Default.Shuffle, "Aléatoire", tint = if (player.shuffle) accent else dim)
+            }
+            IconButton(onClick = player::previous, Modifier.size(56.dp)) {
+                Icon(Icons.Default.SkipPrevious, "Précédent", Modifier.size(36.dp))
+            }
+            Box(
+                Modifier.size(72.dp).clip(CircleShape).background(accent).clickable(onClick = player::togglePlay),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    if (player.isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow, "Lecture/pause",
+                    Modifier.size(40.dp), tint = MaterialTheme.colorScheme.onPrimary,
                 )
-                Spacer(Modifier.width(12.dp))
-                Column(Modifier.weight(1f)) {
-                    Text(track.title, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    Text(track.artist, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodySmall)
-                }
-                IconButton(onClick = player::previous) { Icon(Icons.Default.SkipPrevious, "Précédent") }
-                IconButton(onClick = player::togglePlay) {
-                    Icon(if (player.isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow, "Lecture/pause")
-                }
-                IconButton(onClick = player::next) { Icon(Icons.Default.SkipNext, "Suivant") }
+            }
+            IconButton(onClick = player::next, Modifier.size(56.dp)) {
+                Icon(Icons.Default.SkipNext, "Suivant", Modifier.size(36.dp))
+            }
+            IconButton(onClick = player::cycleRepeat) {
+                Icon(
+                    if (player.repeat == Player.REPEAT_MODE_ONE) Icons.Default.RepeatOne else Icons.Default.Repeat,
+                    "Répéter", tint = if (player.repeat == Player.REPEAT_MODE_OFF) dim else accent,
+                )
             }
         }
+        Spacer(Modifier.height(48.dp))
     }
 }
