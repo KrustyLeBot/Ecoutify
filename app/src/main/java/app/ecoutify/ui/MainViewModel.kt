@@ -72,7 +72,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun refreshStorage() {
         storageOk = app.store.hasStorageAccess()
         viewModelScope.launch {
-            withContext(Dispatchers.IO) { app.store.migratePrivateToPublic() }
+            withContext(Dispatchers.IO) {
+                app.store.migratePrivateToPublic()
+                adoptOrphanDownloads()
+            }
             downloaded = app.store.downloads()
             playlists = app.store.playlists()
         }
@@ -142,6 +145,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun deletePlaylist(p: Playlist) {
         app.store.deletePlaylist(p.id)
         playlists = app.store.playlists()
+        p.tracks.forEach(::deleteIfInNoPlaylist)
     }
 
     fun addToPlaylist(p: Playlist, t: Track) {
@@ -153,5 +157,24 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun removeFromPlaylist(p: Playlist, t: Track) {
         app.store.removeFromPlaylist(p.id, t)
         playlists = app.store.playlists()
+        deleteIfInNoPlaylist(t)
+    }
+
+    /** Downloads only exist for tracks in a playlist: free the file once no playlist has the track. */
+    private fun deleteIfInNoPlaylist(t: Track) {
+        if (playlists.none { pl -> pl.tracks.any { it.url == t.url } } && isDownloaded(t)) deleteDownload(t)
+    }
+
+    /**
+     * Files in `Ecoutify/music/` that no playlist references (e.g. downloaded before downloads were
+     * tied to playlists, or after a reinstall that lost the playlist file) go into a "Récupérés" playlist
+     * so they stay reachable.
+     */
+    private fun adoptOrphanDownloads() {
+        val inPlaylists = app.store.playlists().flatMap { it.tracks }.map { it.url }.toSet()
+        val orphans = app.store.downloads().filter { it.url !in inPlaylists }
+        if (orphans.isEmpty()) return
+        val target = app.store.playlists().firstOrNull { it.name == "Récupérés" } ?: app.store.createPlaylist("Récupérés")
+        orphans.forEach { app.store.addToPlaylist(target.id, it) }
     }
 }

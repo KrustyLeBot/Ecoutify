@@ -54,7 +54,7 @@ class Catalog(downloader: OkHttpDownloader) {
     }
 
     private fun toTrack(i: StreamInfoItem) = Track(
-        url = i.url,
+        url = normalizeUrl(i.url),
         title = cleanTitle(i.name),
         artist = i.uploaderName.orEmpty().removeSuffix(" - Topic").removeSuffix("VEVO").trim(),
         durationSec = i.duration,

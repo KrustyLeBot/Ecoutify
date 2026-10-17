@@ -43,8 +43,6 @@ import app.ecoutify.data.Playlist
 import app.ecoutify.data.Track
 import kotlinx.coroutines.delay
 
-private const val DOWNLOADS_ID = "__downloads__"
-
 private enum class Tab(val label: String, val icon: ImageVector) {
     Home("Pour toi", Icons.Default.AutoAwesome),
     Search("Recherche", Icons.Default.Search),
@@ -225,7 +223,6 @@ private fun SearchScreen(vm: MainViewModel) {
 private fun LibraryScreen(vm: MainViewModel, openList: String?, setOpen: (String?) -> Unit) {
     val playlist = vm.playlists.firstOrNull { it.id == openList }
     when {
-        openList == DOWNLOADS_ID -> ListDetail(vm, "Téléchargés", vm.downloaded, null, setOpen)
         playlist != null -> ListDetail(vm, playlist.name, playlist.tracks, playlist, setOpen)
         else -> LibraryHome(vm, setOpen)
     }
@@ -240,24 +237,17 @@ private fun LibraryHome(vm: MainViewModel, setOpen: (String?) -> Unit) {
             IconButton(onClick = { creating = true }) { Icon(Icons.Default.Add, "Nouvelle playlist") }
         }
         LazyColumn(Modifier.fillMaxSize()) {
-            item {
-                LibraryRow(
-                    icon = Icons.Default.DownloadDone, tint = MaterialTheme.colorScheme.secondary,
-                    title = "Téléchargés", subtitle = "${vm.downloaded.size} titres · écoute hors ligne",
-                    onClick = { setOpen(DOWNLOADS_ID) },
-                )
-            }
             items(vm.playlists, key = { it.id }) { p ->
                 LibraryRow(
                     icon = Icons.Default.LibraryMusic, tint = MaterialTheme.colorScheme.primary,
                     title = p.name,
-                    subtitle = "${p.tracks.size} titres · ${p.tracks.count(vm::isDownloaded)} hors ligne",
+                    subtitle = "${p.tracks.count(vm::isDownloaded)}/${p.tracks.size} hors ligne",
                     onClick = { setOpen(p.id) },
                     onLongClick = { toDelete = p },
                 )
             }
             if (vm.playlists.isEmpty()) {
-                item { EmptyHint("Crée une playlist avec + ou depuis le menu ⋮ d'un titre.") }
+                item { EmptyHint("Crée une playlist avec +, ajoute-y des titres (menu ⋮), puis télécharge-les.") }
             }
         }
     }
@@ -299,11 +289,17 @@ private fun LibraryRow(
 }
 
 @Composable
-private fun ListDetail(vm: MainViewModel, title: String, tracks: List<Track>, playlist: Playlist?, setOpen: (String?) -> Unit) {
+private fun ListDetail(vm: MainViewModel, title: String, tracks: List<Track>, playlist: Playlist, setOpen: (String?) -> Unit) {
     Column(Modifier.fillMaxSize()) {
         Row(Modifier.fillMaxWidth().padding(start = 4.dp, top = 12.dp), verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = { setOpen(null) }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Retour") }
-            Text(title, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Column(Modifier.weight(1f)) {
+                Text(title, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(
+                    "${tracks.count(vm::isDownloaded)}/${tracks.size} hors ligne",
+                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
         }
         Row(Modifier.padding(horizontal = 16.dp, vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Button(onClick = { vm.play(tracks, 0) }, enabled = tracks.isNotEmpty()) {
@@ -312,13 +308,11 @@ private fun ListDetail(vm: MainViewModel, title: String, tracks: List<Track>, pl
             FilledTonalButton(onClick = { vm.playShuffled(tracks) }, enabled = tracks.isNotEmpty()) {
                 Icon(Icons.Default.Shuffle, null); Spacer(Modifier.width(4.dp)); Text("Aléatoire")
             }
-            if (playlist != null) {
-                IconButton(onClick = { vm.downloadAll(tracks) }, enabled = tracks.any { !vm.isDownloaded(it) }) {
-                    Icon(Icons.Default.Download, "Tout télécharger")
-                }
+            IconButton(onClick = { vm.downloadAll(tracks) }, enabled = tracks.any { !vm.isDownloaded(it) }) {
+                Icon(Icons.Default.Download, "Tout télécharger")
             }
         }
-        if (tracks.isEmpty()) EmptyHint(if (playlist != null) "Playlist vide. Ajoute des titres depuis le menu ⋮." else "Aucun titre téléchargé.")
+        if (tracks.isEmpty()) EmptyHint("Playlist vide. Ajoute des titres depuis le menu ⋮ d'un titre.")
         TrackList(vm, tracks, playlist = playlist)
     }
 }
@@ -382,12 +376,13 @@ private fun TrackRow(vm: MainViewModel, track: Track, queue: List<Track>, index:
             IconButton(onClick = { menu = true }) { Icon(Icons.Default.MoreVert, "Options") }
             DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
                 DropdownMenuItem(text = { Text("Ajouter à une playlist") }, onClick = { menu = false; picking = true })
-                if (downloaded) {
-                    DropdownMenuItem(text = { Text("Supprimer le téléchargement") }, onClick = { menu = false; vm.deleteDownload(track) })
-                } else {
-                    DropdownMenuItem(text = { Text("Télécharger") }, onClick = { menu = false; vm.download(track) })
-                }
+                // Downloads are only possible for tracks that are in a playlist.
                 if (playlist != null) {
+                    if (downloaded) {
+                        DropdownMenuItem(text = { Text("Supprimer le téléchargement") }, onClick = { menu = false; vm.deleteDownload(track) })
+                    } else {
+                        DropdownMenuItem(text = { Text("Télécharger") }, onClick = { menu = false; vm.download(track) })
+                    }
                     DropdownMenuItem(text = { Text("Retirer de la playlist") }, onClick = { menu = false; vm.removeFromPlaylist(playlist, track) })
                 }
             }
