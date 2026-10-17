@@ -1,6 +1,13 @@
 package app.ecoutify.ui
 
+import android.Manifest
+import android.app.Activity
+import android.content.Intent
+import android.net.Uri
+import android.os.Build
+import android.provider.Settings
 import androidx.activity.compose.BackHandler
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
@@ -89,6 +96,7 @@ fun EcoutifyScreen(vm: MainViewModel) {
             },
         ) { padding ->
             Column(Modifier.padding(padding).fillMaxSize()) {
+                if (!vm.storageOk) StorageBanner()
                 if (!vm.online) OfflineBanner()
                 when (tab) {
                     Tab.Home -> HomeScreen(vm)
@@ -98,6 +106,33 @@ fun EcoutifyScreen(vm: MainViewModel) {
             }
         }
         if (showPlayer) PlayerScreen(vm, onClose = { showPlayer = false })
+    }
+}
+
+@Composable
+private fun StorageBanner() {
+    val context = LocalContext.current
+    Row(
+        Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.primaryContainer)
+            .padding(start = 16.dp, end = 8.dp, top = 4.dp, bottom = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            "Autorise l'accès aux fichiers pour garder tes musiques dans le dossier Ecoutify, même après désinstallation.",
+            style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f),
+        )
+        TextButton(onClick = {
+            if (Build.VERSION.SDK_INT >= 30) {
+                val intent = Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION, Uri.parse("package:${context.packageName}"))
+                runCatching { context.startActivity(intent) }.onFailure {
+                    context.startActivity(Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION))
+                }
+            } else {
+                (context as? Activity)?.requestPermissions(
+                    arrayOf(Manifest.permission.READ_EXTERNAL_STORAGE, Manifest.permission.WRITE_EXTERNAL_STORAGE), 2,
+                )
+            }
+        }) { Text("Autoriser") }
     }
 }
 

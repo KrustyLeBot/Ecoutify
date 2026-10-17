@@ -24,6 +24,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     var online by mutableStateOf(checkOnline())
         private set
     var message by mutableStateOf<String?>(null)
+    var storageOk by mutableStateOf(app.store.hasStorageAccess())
+        private set
 
     val player = PlayerConnection(application, app, isOnline = ::checkOnline) { message = it }
 
@@ -44,6 +46,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         private set
 
     init {
+        refreshStorage()
         connectivity.registerDefaultNetworkCallback(object : ConnectivityManager.NetworkCallback() {
             override fun onAvailable(network: Network) {
                 online = true
@@ -62,6 +65,16 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
         viewModelScope.launch {
             app.downloads.errors.collect { e -> if (e != null) message = e }
+        }
+    }
+
+    /** À rappeler au retour dans l'appli : prend en compte l'autorisation d'accès aux fichiers. */
+    fun refreshStorage() {
+        storageOk = app.store.hasStorageAccess()
+        viewModelScope.launch {
+            withContext(Dispatchers.IO) { app.store.migratePrivateToPublic() }
+            downloaded = app.store.downloads()
+            playlists = app.store.playlists()
         }
     }
 

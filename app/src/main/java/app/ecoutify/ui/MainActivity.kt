@@ -24,4 +24,9 @@ class MainActivity : ComponentActivity() {
         }
         setContent { EcoutifyTheme { EcoutifyScreen(vm) } }
     }
+
+    override fun onResume() {
+        super.onResume()
+        vm.refreshStorage()
+    }
 }

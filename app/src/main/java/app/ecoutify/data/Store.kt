@@ -1,18 +1,65 @@
 package app.ecoutify.data
 
+import android.Manifest
 import android.content.Context
+import android.content.pm.PackageManager
+import android.os.Build
+import android.os.Environment
 import androidx.media3.common.Player
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
 import java.util.UUID
 
-/** Tout est stocké localement (aucun compte) : historique, téléchargements, playlists, réglages. */
+/**
+ * Tout est local (aucun compte).
+ *
+ * Les musiques et les playlists vivent dans le dossier public `Ecoutify/` du stockage interne
+ * (à la racine, pas dans « Musique ») : il survit à la désinstallation et tout y est redétecté
+ * à la réinstallation. Pour cela l'appli demande « l'accès à tous les fichiers » ; tant qu'il
+ * n'est pas accordé, un dossier privé est utilisé, puis son contenu est déplacé au moment de l'autorisation.
+ *
+ * - `Ecoutify/musique/<artiste> - <titre> [<id YouTube>].m4a` : un fichier par titre téléchargé ;
+ *   l'artiste, le titre et l'identifiant se relisent depuis le nom du fichier.
+ * - `Ecoutify/playlists.json` : les playlists.
+ */
 class Store(private val context: Context) {
     private val prefs = context.getSharedPreferences("ecoutify", Context.MODE_PRIVATE)
 
+    private val privateRoot: File
+        get() = File(context.getExternalFilesDir(null) ?: context.filesDir, "Ecoutify")
+
+    private val publicRoot: File
+        get() = File(Environment.getExternalStorageDirectory(), "Ecoutify")
+
+    /** L'accès au dossier public `Ecoutify/` est-il autorisé ? */
+    fun hasStorageAccess(): Boolean =
+        if (Build.VERSION.SDK_INT >= 30) Environment.isExternalStorageManager()
+        else context.checkSelfPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED
+
+    private val root: File
+        get() = (if (hasStorageAccess()) publicRoot else privateRoot).also { it.mkdirs() }
+
     val musicDir: File
-        get() = (context.getExternalFilesDir("music") ?: File(context.filesDir, "music")).also { it.mkdirs() }
+        get() = File(root, "musique").also { it.mkdirs() }
+
+    private val playlistsFile: File
+        get() = File(root, "playlists.json")
+
+    /** Déplace vers le dossier public ce qui a été téléchargé avant l'autorisation d'accès. */
+    fun migratePrivateToPublic() {
+        if (!hasStorageAccess() || !privateRoot.exists()) return
+        runCatching {
+            File(privateRoot, "musique").listFiles()?.forEach { f ->
+                val target = File(musicDir, f.name)
+                if (!target.exists()) f.copyTo(target)
+                f.delete()
+            }
+            val privatePlaylists = File(privateRoot, "playlists.json")
+            if (privatePlaylists.exists() && !playlistsFile.exists()) privatePlaylists.copyTo(playlistsFile)
+            privatePlaylists.delete()
+        }
+    }
 
     // --- Réglages de lecture ---
     var shuffle: Boolean
@@ -34,28 +81,46 @@ class Store(private val context: Context) {
     fun cachedRecommendations(): List<Track> = readList("recs")
     fun saveRecommendations(list: List<Track>) = writeList("recs", list)
 
-    // --- Téléchargements ---
-    fun downloads(): List<Track> = readList("downloads").filter { fileOf(it.url) != null }
+    // --- Téléchargements (relus depuis le dossier à chaque fois) ---
+    fun downloads(): List<Track> =
+        (musicDir.listFiles() ?: emptyArray()).sortedByDescending { it.lastModified() }.mapNotNull { trackOf(it) }
 
-    fun downloadedFile(url: String): File? = fileOf(url)
+    fun downloadedFile(url: String): File? {
+        val id = videoId(url) ?: return null
+        return (musicDir.listFiles() ?: emptyArray()).firstOrNull { fileId(it) == id }
+    }
 
-    fun addDownload(t: Track, file: File) {
-        prefs.edit().putString("file_${t.url}", file.name).apply()
-        writeList("downloads", listOf(t) + readList("downloads").filter { it.url != t.url })
+    /** Fichier de destination pour [t] (écrit d'abord en `.part`, renommé une fois complet). */
+    fun fileFor(t: Track, ext: String): File {
+        val id = videoId(t.url) ?: error("URL inconnue")
+        fun clean(x: String) = x.replace(Regex("[\\\\/:*?\"<>|\\n\\r]"), "_").replace(" - ", " ").trim()
+        val base = listOf(clean(t.artist), clean(t.title)).filter { it.isNotEmpty() }.joinToString(" - ").take(100).trim()
+        return File(musicDir, "$base [$id].$ext")
     }
 
     fun removeDownload(t: Track) {
-        fileOf(t.url)?.delete()
-        prefs.edit().remove("file_${t.url}").apply()
-        writeList("downloads", readList("downloads").filter { it.url != t.url })
+        downloadedFile(t.url)?.delete()
     }
 
-    private fun fileOf(url: String): File? =
-        prefs.getString("file_$url", null)?.let { File(musicDir, it) }?.takeIf { it.exists() }
+    private fun videoId(url: String) =
+        Regex("[?&]v=([A-Za-z0-9_-]{11})").find(url)?.groupValues?.get(1)
+
+    private val fileRegex = Regex("^(.*) \\[([A-Za-z0-9_-]{11})]\\.(m4a|webm|opus|mp3|ogg|mp4|aac)$")
+
+    private fun fileId(f: File) = fileRegex.find(f.name)?.groupValues?.get(2)
+
+    private fun trackOf(f: File): Track? {
+        val m = fileRegex.find(f.name) ?: return null
+        val base = m.groupValues[1].trim()
+        val artist = if (" - " in base) base.substringBefore(" - ") else ""
+        val title = if (" - " in base) base.substringAfter(" - ") else base
+        return Track("https://www.youtube.com/watch?v=${m.groupValues[2]}", title, artist, 0, null)
+    }
 
     // --- Playlists ---
     fun playlists(): List<Playlist> {
-        val arr = JSONArray(prefs.getString("playlists", "[]"))
+        val text = runCatching { playlistsFile.readText() }.getOrDefault("[]")
+        val arr = runCatching { JSONArray(text) }.getOrDefault(JSONArray())
         return (0 until arr.length()).map {
             val o = arr.getJSONObject(it)
             val tracks = o.getJSONArray("tracks")
@@ -75,7 +140,9 @@ class Store(private val context: Context) {
                     .put("tracks", JSONArray().also { a -> p.tracks.forEach { a.put(it.toJson()) } })
             )
         }
-        prefs.edit().putString("playlists", arr.toString()).apply()
+        val tmp = File(playlistsFile.parentFile, "playlists.json.tmp")
+        tmp.writeText(arr.toString())
+        tmp.renameTo(playlistsFile)
     }
 
     fun createPlaylist(name: String): Playlist {

@@ -33,8 +33,8 @@ class Downloads(
             var out: File? = null
             try {
                 val (streamUrl, ext) = catalog.audioStream(track.url)
-                val safe = track.url.substringAfter("v=").filter { it.isLetterOrDigit() || it == '-' || it == '_' }
-                out = File(store.musicDir, "$safe.$ext")
+                val finalFile = store.fileFor(track, ext)
+                out = File(finalFile.parentFile, finalFile.name + ".part")
                 val total = Regex("[?&]clen=(\\d+)").find(streamUrl)?.groupValues?.get(1)?.toLongOrNull()
                 out.outputStream().use { output ->
                     var done = 0L
@@ -62,7 +62,7 @@ class Downloads(
                         if (total == null) break // taille inconnue : une seule requête
                     }
                 }
-                store.addDownload(track, out)
+                check(out.renameTo(finalFile)) { "Impossible d'enregistrer le fichier" }
             } catch (e: Exception) {
                 out?.delete()
                 errors.value = "Téléchargement impossible (${track.title}) : ${e.message}"
