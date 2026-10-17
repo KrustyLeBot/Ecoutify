@@ -7,6 +7,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import okhttp3.OkHttpClient
+import okhttp3.Request
 import java.io.File
 
 /**
@@ -32,37 +33,35 @@ class Downloads(
         scope.launch {
             var out: File? = null
             try {
-                val source = catalog.audioSource(track.url)
-                val finalFile = store.fileFor(track, source.ext)
-                out = File(finalFile.parentFile, finalFile.name + ".part")
-                val total = Regex("[?&]clen=(\\d+)").find(source.url)?.groupValues?.get(1)?.toLongOrNull()
-                out.outputStream().use { output ->
+                val (streamUrl, ext) = catalog.audioStream(track.url)
+                val finalFile = store.fileFor(track, ext)
+                val partFile = File(finalFile.parentFile, finalFile.name + ".part")
+                out = partFile
+                val request = Request.Builder().url(streamUrl).header("User-Agent", OkHttpDownloader.USER_AGENT).build()
+                client.newCall(request).execute().use { resp ->
+                    check(resp.isSuccessful) { "HTTP ${resp.code}" }
+                    val body = resp.body ?: error("Réponse vide")
+                    val total = body.contentLength().coerceAtLeast(1)
                     var done = 0L
                     var lastPct = -1
-                    while (total == null || done < total) {
-                        val end = if (total != null) minOf(done + CHUNK, total) - 1 else null
-                        client.newCall(YoutubeHttp.request(source, done, end)).execute().use { resp ->
-                            check(resp.isSuccessful) { "HTTP ${resp.code}" }
-                            val body = resp.body ?: error("Réponse vide")
+                    body.byteStream().use { input ->
+                        partFile.outputStream().use { output ->
                             val buf = ByteArray(64 * 1024)
-                            body.byteStream().use { input ->
-                                while (true) {
-                                    val n = input.read(buf)
-                                    if (n < 0) break
-                                    output.write(buf, 0, n)
-                                    done += n
-                                    val pct = if (total != null) (done * 100 / total).toInt() else 50
-                                    if (pct != lastPct) {
-                                        lastPct = pct
-                                        progress.update { it + (track.url to pct) }
-                                    }
+                            while (true) {
+                                val n = input.read(buf)
+                                if (n < 0) break
+                                output.write(buf, 0, n)
+                                done += n
+                                val pct = (done * 100 / total).toInt()
+                                if (pct != lastPct) {
+                                    lastPct = pct
+                                    progress.update { it + (track.url to pct) }
                                 }
                             }
                         }
-                        if (total == null) break // unknown size: single request
                     }
                 }
-                check(out.renameTo(finalFile)) { "Impossible d'enregistrer le fichier" }
+                check(partFile.renameTo(finalFile)) { "Impossible d'enregistrer le fichier" }
             } catch (e: Exception) {
                 out?.delete()
                 errors.value = "Téléchargement impossible (${track.title}) : ${e.message}"
@@ -72,7 +71,4 @@ class Downloads(
         }
     }
 
-    private companion object {
-        const val CHUNK = 8L * 1024 * 1024
-    }
 }
