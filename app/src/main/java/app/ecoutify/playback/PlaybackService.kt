@@ -1,5 +1,6 @@
 package app.ecoutify.playback
 
+import android.content.Intent
 import android.net.Uri
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
@@ -72,6 +73,16 @@ class PlaybackService : MediaSessionService() {
     }
 
     override fun onGetSession(controllerInfo: MediaSession.ControllerInfo) = session
+
+    /** Swiping the app away from the recent apps list stops the music. */
+    override fun onTaskRemoved(rootIntent: Intent?) {
+        session?.player?.run {
+            pause()
+            stop()
+            clearMediaItems()
+        }
+        stopSelf()
+    }
 
     override fun onDestroy() {
         session?.run {

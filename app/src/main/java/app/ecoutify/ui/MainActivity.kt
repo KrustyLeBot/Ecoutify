@@ -24,4 +24,10 @@ class MainActivity : ComponentActivity() {
         super.onResume()
         vm.refreshStorage()
     }
+
+    override fun onDestroy() {
+        // Leaving the app with Back (not a rotation) stops the music; Home keeps it playing.
+        if (isFinishing) vm.player.stopAll()
+        super.onDestroy()
+    }
 }

@@ -123,6 +123,16 @@ class PlayerConnection(
         controller?.let { if (it.isPlaying) it.pause() else it.play() }
     }
 
+    /** Stops playback and empties the queue (used when the app is quit). */
+    fun stopAll() {
+        controller?.run {
+            pause()
+            stop()
+            clearMediaItems()
+        }
+        current = null
+    }
+
     fun next() { controller?.seekToNextMediaItem() }
 
     fun previous() {
