@@ -6,6 +6,8 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
@@ -131,11 +133,13 @@ private fun ScreenTitle(title: String, subtitle: String? = null, actions: @Compo
 
 @Composable
 private fun HomeScreen(vm: MainViewModel) {
+    var settings by remember { mutableStateOf(false) }
     Column(Modifier.fillMaxSize()) {
         ScreenTitle(
             "Pour toi",
-            if (vm.downloaded.isEmpty()) "Télécharge des titres pour affiner les suggestions" else "D'après tes titres et tes playlists",
+            if (vm.downloaded.isEmpty()) "Télécharge des titres pour affiner les suggestions" else "D'après tes titres, tes playlists et ListenBrainz / Last.fm",
         ) {
+            IconButton(onClick = { settings = true }) { Icon(Icons.Default.Settings, "Réglages") }
             IconButton(onClick = vm::refreshRecommendations, enabled = vm.online) {
                 Icon(Icons.Default.Refresh, "Actualiser")
             }
@@ -146,6 +150,35 @@ private fun HomeScreen(vm: MainViewModel) {
         }
         TrackList(vm, vm.recommendations)
     }
+    if (settings) AccountsDialog(vm) { settings = false }
+}
+
+@Composable
+private fun AccountsDialog(vm: MainViewModel, onDismiss: () -> Unit) {
+    val initial = remember { vm.accounts() }
+    var lbUser by remember { mutableStateOf(initial[0]) }
+    var lbToken by remember { mutableStateOf(initial[1]) }
+    var lfmKey by remember { mutableStateOf(initial[2]) }
+    var lfmUser by remember { mutableStateOf(initial[3]) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Recommandations") },
+        text = {
+            Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(
+                    "Tout est facultatif : les suggestions marchent sans compte (ListenBrainz). " +
+                        "Renseigne tes comptes pour partir de ton top artistes, et un jeton ListenBrainz pour enregistrer tes écoutes.",
+                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                OutlinedTextField(lbUser, { lbUser = it }, label = { Text("ListenBrainz : utilisateur") }, singleLine = true)
+                OutlinedTextField(lbToken, { lbToken = it }, label = { Text("ListenBrainz : jeton (écoutes)") }, singleLine = true)
+                OutlinedTextField(lfmKey, { lfmKey = it }, label = { Text("Last.fm : clé d'API") }, singleLine = true)
+                OutlinedTextField(lfmUser, { lfmUser = it }, label = { Text("Last.fm : utilisateur") }, singleLine = true)
+            }
+        },
+        confirmButton = { TextButton(onClick = { vm.saveAccounts(lbUser, lbToken, lfmKey, lfmUser); onDismiss() }) { Text("Enregistrer") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Annuler") } },
+    )
 }
 
 // ---------------------------------------------------------------- Recherche

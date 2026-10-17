@@ -17,10 +17,14 @@ jobs:
           java-version: 17
       - uses: gradle/actions/setup-gradle@v4
       - name: Build debug APK
-        run: ./gradlew assembleDebug --console=plain 2>&1 | tee build.log; exit ${PIPESTATUS[0]}
+        shell: bash
+        run: |
+          set -o pipefail
+          ./gradlew assembleDebug --console=plain 2>&1 | tee build.log
       - name: Erreurs de compilation
         if: failure()
-        run: grep -E '^e: |error:|What went wrong|Execution failed|> ' -A2 build.log | head -80 || true
+        run: |
+          grep -E '^e: |error:|What went wrong|Execution failed' -A3 build.log | head -80 || true
       - uses: actions/upload-artifact@v4
         with:
           name: ecoutify-debug-apk

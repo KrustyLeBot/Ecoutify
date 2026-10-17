@@ -15,6 +15,11 @@ import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
 import app.ecoutify.EcoutifyApp
 import app.ecoutify.data.Track
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /**
  * Côté UI : pilote le service de lecture et expose l'état observable par Compose.
@@ -38,6 +43,8 @@ class PlayerConnection(
     private var controller: MediaController? = null
     private var pending: ((MediaController) -> Unit)? = null
     private var errorStreak = 0
+    private var scrobbleJob: Job? = null
+    private val scope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + Dispatchers.Main)
 
     private val listener = object : Player.Listener {
         override fun onIsPlayingChanged(playing: Boolean) {
@@ -50,7 +57,10 @@ class PlayerConnection(
 
         override fun onMediaItemTransition(item: MediaItem?, reason: Int) {
             current = item?.let(::trackOf)
-            current?.let { app.store.addToHistory(it) }
+            current?.let {
+                app.store.addToHistory(it)
+                scrobble(it)
+            }
         }
 
         override fun onShuffleModeEnabledChanged(enabled: Boolean) {
@@ -146,6 +156,18 @@ class PlayerConnection(
         app.store.repeat = next
         repeat = next
         controller?.repeatMode = next
+    }
+
+    /** Envoie « en cours d'écoute », puis l'écoute elle-même à ListenBrainz après 35 s (si un jeton est renseigné). */
+    private fun scrobble(t: Track) {
+        scrobbleJob?.cancel()
+        if (app.store.lbToken.isBlank()) return
+        val startedAt = System.currentTimeMillis() / 1000
+        scrobbleJob = scope.launch {
+            withContext(Dispatchers.IO) { runCatching { app.discovery.playingNow(t) } }
+            delay(35_000)
+            withContext(Dispatchers.IO) { runCatching { app.discovery.scrobble(t, startedAt) } }
+        }
     }
 
     val positionMs: Long get() = controller?.currentPosition ?: 0L

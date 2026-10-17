@@ -57,9 +57,15 @@ class Catalog(downloader: OkHttpDownloader) {
 
     private fun toTrack(i: StreamInfoItem) = Track(
         url = i.url,
-        title = i.name,
-        artist = i.uploaderName.orEmpty().removeSuffix(" - Topic"),
+        title = cleanTitle(i.name),
+        artist = i.uploaderName.orEmpty().removeSuffix(" - Topic").removeSuffix("VEVO").trim(),
         durationSec = i.duration,
         thumbnail = i.thumbnails.firstOrNull()?.url,
     )
+
+    /** Retire les mentions « (Official Video) », « [Lyrics] »… des titres YouTube. */
+    private fun cleanTitle(raw: String): String {
+        val noise = Regex("\\s*[\\(\\[][^\\)\\]]*(official|video|audio|lyrics?|clip|visuali[sz]er|4k|hd)[^\\)\\]]*[\\)\\]]", RegexOption.IGNORE_CASE)
+        return raw.replace(noise, "").trim().ifEmpty { raw }
+    }
 }
