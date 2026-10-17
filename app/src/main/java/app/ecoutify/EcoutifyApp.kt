@@ -2,7 +2,6 @@ package app.ecoutify
 
 import android.app.Application
 import app.ecoutify.data.Catalog
-import app.ecoutify.data.Discovery
 import app.ecoutify.data.Downloads
 import app.ecoutify.data.OkHttpDownloader
 import app.ecoutify.data.Recommender
@@ -14,6 +13,5 @@ class EcoutifyApp : Application() {
     val store by lazy { Store(this) }
     val catalog by lazy { Catalog(OkHttpDownloader(http)) }
     val downloads by lazy { Downloads(catalog, store, http) }
-    val discovery by lazy { Discovery(http) }
-    val recommender by lazy { Recommender(catalog, store, discovery) }
+    val recommender by lazy { Recommender(catalog, store) }
 }

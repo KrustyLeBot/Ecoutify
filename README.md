@@ -9,7 +9,7 @@ téléchargement pour l'écoute hors ligne, playlists, et recommandations.
 - **Hors ligne** : le flux audio d'origine (M4A/AAC ou Opus) est téléchargé tel quel, sans conversion, dans le dossier `Ecoutify/` à la racine du stockage (pas dans « Musique »). Il survit à la désinstallation : après réinstallation, musiques et playlists (`Ecoutify/musique/`, `Ecoutify/playlists.json`) sont redétectées. L'appli demande pour cela l'accès à tous les fichiers. Sans connexion, seuls les titres téléchargés sont lus.
 - **Playlists** : locales, avec des titres téléchargés ou non (« Tout télécharger » pour une playlist entière).
 - **Lecteur** : lecture/pause, précédent/suivant, barre de progression, aléatoire, répétition (off / tout / un titre). La file est la liste d'où l'on lance un titre ; en aléatoire le titre suivant est tiré au hasard.
-- **Recommandations** (onglet « Pour toi ») : elles partent uniquement de tes titres téléchargés et de tes playlists (ni recherches ni historique). [ListenBrainz](https://listenbrainz.org) (API publique, sans compte ni clé) donne des artistes proches ; leurs titres sont cherchés sur YouTube. Les dernières suggestions restent visibles hors ligne.
+- **Recommandations** (onglet « Pour toi ») : elles partent uniquement de tes titres téléchargés et de tes playlists (ni recherches ni historique) et reprennent les « titres similaires » proposés par YouTube. Les dernières suggestions restent visibles hors ligne.
 
 ## Obtenir l'APK
 
