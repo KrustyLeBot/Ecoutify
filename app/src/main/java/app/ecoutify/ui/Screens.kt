@@ -112,6 +112,7 @@ fun EcoutifyScreen(vm: MainViewModel) {
 @Composable
 private fun StorageBanner() {
     val context = LocalContext.current
+    CompositionLocalProvider(LocalContentColor provides MaterialTheme.colorScheme.onPrimaryContainer) {
     Row(
         Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.primaryContainer)
             .padding(start = 16.dp, end = 8.dp, top = 4.dp, bottom = 4.dp),
@@ -134,18 +135,21 @@ private fun StorageBanner() {
             }
         }) { Text("Autoriser") }
     }
+    }
 }
 
 @Composable
 private fun OfflineBanner() {
-    Row(
-        Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.primaryContainer)
-            .padding(horizontal = 16.dp, vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Icon(Icons.Default.WifiOff, null, Modifier.size(18.dp))
-        Spacer(Modifier.width(8.dp))
-        Text("Hors ligne — seuls les titres téléchargés sont lisibles", style = MaterialTheme.typography.bodySmall)
+    CompositionLocalProvider(LocalContentColor provides MaterialTheme.colorScheme.onPrimaryContainer) {
+        Row(
+            Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.primaryContainer)
+                .padding(horizontal = 16.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(Icons.Default.WifiOff, null, Modifier.size(18.dp))
+            Spacer(Modifier.width(8.dp))
+            Text("Hors ligne — seuls les titres téléchargés sont lisibles", style = MaterialTheme.typography.bodySmall)
+        }
     }
 }
 
@@ -156,7 +160,7 @@ private fun ScreenTitle(title: String, subtitle: String? = null, actions: @Compo
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Column(Modifier.weight(1f)) {
-            Text(title, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+            Text(title, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onBackground)
             if (subtitle != null) {
                 Text(subtitle, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
@@ -238,7 +242,7 @@ private fun LibraryHome(vm: MainViewModel, setOpen: (String?) -> Unit) {
         LazyColumn(Modifier.fillMaxSize()) {
             item {
                 LibraryRow(
-                    icon = Icons.Default.DownloadDone, tint = Mint,
+                    icon = Icons.Default.DownloadDone, tint = MaterialTheme.colorScheme.secondary,
                     title = "Téléchargés", subtitle = "${vm.downloaded.size} titres · écoute hors ligne",
                     onClick = { setOpen(DOWNLOADS_ID) },
                 )
@@ -372,7 +376,7 @@ private fun TrackRow(vm: MainViewModel, track: Track, queue: List<Track>, index:
             progress != null -> CircularProgressIndicator(
                 progress = { progress / 100f }, modifier = Modifier.size(20.dp), strokeWidth = 2.dp,
             )
-            downloaded -> Icon(Icons.Default.DownloadDone, "Téléchargé", tint = Mint, modifier = Modifier.size(20.dp))
+            downloaded -> Icon(Icons.Default.DownloadDone, "Téléchargé", tint = MaterialTheme.colorScheme.secondary, modifier = Modifier.size(20.dp))
         }
         Box {
             IconButton(onClick = { menu = true }) { Icon(Icons.Default.MoreVert, "Options") }
@@ -485,7 +489,7 @@ private fun PlayerScreen(vm: MainViewModel, onClose: () -> Unit) {
 
     Column(
         Modifier.fillMaxSize()
-            .background(Brush.verticalGradient(listOf(Color(0xFF2B2554), MaterialTheme.colorScheme.background)))
+            .background(Brush.verticalGradient(listOf(MaterialTheme.colorScheme.primaryContainer, MaterialTheme.colorScheme.background)))
             .systemBarsPadding()
             .padding(horizontal = 24.dp),
     ) {
