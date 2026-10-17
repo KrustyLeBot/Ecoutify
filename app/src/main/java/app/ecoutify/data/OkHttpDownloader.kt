@@ -7,7 +7,7 @@ import org.schabi.newpipe.extractor.downloader.Request
 import org.schabi.newpipe.extractor.downloader.Response
 import org.schabi.newpipe.extractor.exceptions.ReCaptchaException
 
-/** Pont HTTP entre NewPipeExtractor et OkHttp. */
+/** HTTP bridge between NewPipeExtractor and OkHttp. */
 class OkHttpDownloader(private val client: OkHttpClient) : Downloader() {
 
     override fun execute(request: Request): Response {

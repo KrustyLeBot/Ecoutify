@@ -5,9 +5,9 @@ import org.schabi.newpipe.extractor.services.youtube.YoutubeParsingHelper
 import java.util.concurrent.atomic.AtomicInteger
 
 /**
- * Reproduit la façon dont NewPipe interroge les serveurs « videoplayback » de YouTube
- * (requête POST au corps fixe, paramètres `rn` et `range` dans l'URL, en-têtes navigateur),
- * sans quoi les flux sont lents ou refusés.
+ * Mimics the way NewPipe queries YouTube's "videoplayback" servers
+ * (POST request with a fixed body, `rn` and `range` parameters in the URL, browser headers);
+ * without it streams are throttled or refused.
  */
 object YoutubeHttp {
     val POST_BODY = byteArrayOf(0x78, 0)
@@ -29,7 +29,7 @@ object YoutubeHttp {
         return h
     }
 
-    /** Ajoute `rn` et, si besoin, la plage d'octets `range=start-end` (end inclus, null = jusqu'à la fin). */
+    /** Adds `rn` and, if needed, the byte range `range=start-end` (end inclusive, null = to the end). */
     fun withParams(url: String, start: Long = 0, endInclusive: Long? = null): String {
         var u = url
         if (!u.contains("&rn=")) u += "&rn=${requestNumber.incrementAndGet()}"

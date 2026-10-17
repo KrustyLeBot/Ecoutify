@@ -165,7 +165,7 @@ private fun ScreenTitle(title: String, subtitle: String? = null, actions: @Compo
     }
 }
 
-// ---------------------------------------------------------------- Pour toi
+// ---------------------------------------------------------------- For you
 
 @Composable
 private fun HomeScreen(vm: MainViewModel) {
@@ -186,7 +186,7 @@ private fun HomeScreen(vm: MainViewModel) {
     }
 }
 
-// ---------------------------------------------------------------- Recherche
+// ---------------------------------------------------------------- Search
 
 @Composable
 private fun SearchScreen(vm: MainViewModel) {
@@ -215,7 +215,7 @@ private fun SearchScreen(vm: MainViewModel) {
     }
 }
 
-// ---------------------------------------------------------------- Bibliothèque
+// ---------------------------------------------------------------- Library
 
 @Composable
 private fun LibraryScreen(vm: MainViewModel, openList: String?, setOpen: (String?) -> Unit) {
@@ -319,7 +319,7 @@ private fun ListDetail(vm: MainViewModel, title: String, tracks: List<Track>, pl
     }
 }
 
-// ---------------------------------------------------------------- Liste de titres
+// ---------------------------------------------------------------- Track list
 
 @Composable
 private fun EmptyHint(text: String) {
@@ -434,7 +434,7 @@ private fun NameDialog(title: String, onDismiss: () -> Unit, onConfirm: (String)
     )
 }
 
-// ---------------------------------------------------------------- Lecteur
+// ---------------------------------------------------------------- Player
 
 @Composable
 private fun rememberProgress(vm: MainViewModel): State<Pair<Long, Long>> {

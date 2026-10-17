@@ -19,8 +19,8 @@ android {
     buildTypes {
         release {
             isMinifyEnabled = false
-            // Signé avec la clé debug pour pouvoir installer l'APK directement.
-            // Remplacer par une vraie clé pour une diffusion publique.
+            // Signed with the debug key so the APK can be installed directly.
+            // Replace with a real key for public distribution.
             signingConfig = signingConfigs.getByName("debug")
         }
     }
@@ -28,7 +28,7 @@ android {
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
-        // NewPipeExtractor utilise des API Java 8+ (java.time, etc.)
+        // NewPipeExtractor uses Java 8+ APIs (java.time, etc.)
         isCoreLibraryDesugaringEnabled = true
     }
     kotlinOptions { jvmTarget = "17" }
@@ -42,11 +42,11 @@ android {
 dependencies {
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.5")
 
-    // Extraction YouTube (recherche, flux audio, titres similaires) : sans compte, sans pub.
+    // YouTube extraction (search, audio streams, similar tracks): no account, no ads.
     implementation("com.github.TeamNewPipe:NewPipeExtractor:v0.26.5")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
 
-    // Lecture en arrière-plan + notification média
+    // Background playback + media notification
     val media3 = "1.6.0"
     implementation("androidx.media3:media3-exoplayer:$media3")
     implementation("androidx.media3:media3-session:$media3")

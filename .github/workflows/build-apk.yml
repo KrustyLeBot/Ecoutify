@@ -21,7 +21,7 @@ jobs:
         run: |
           set -o pipefail
           ./gradlew assembleDebug --console=plain 2>&1 | tee build.log
-      - name: Erreurs de compilation
+      - name: Show compile errors
         if: failure()
         run: |
           grep -E '^e: |error:|What went wrong|Execution failed' -A3 build.log | head -80 || true

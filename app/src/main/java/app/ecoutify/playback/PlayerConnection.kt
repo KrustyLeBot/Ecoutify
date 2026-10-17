@@ -17,8 +17,8 @@ import app.ecoutify.EcoutifyApp
 import app.ecoutify.data.Track
 
 /**
- * Côté UI : pilote le service de lecture et expose l'état observable par Compose.
- * La file est simplement la liste d'où on lance le titre ; aléatoire et répétition sont ceux d'ExoPlayer.
+ * UI side: drives the playback service and exposes state observable by Compose.
+ * The queue is simply the list the track was started from; shuffle and repeat are ExoPlayer's own.
  */
 class PlayerConnection(
     context: Context,
@@ -96,7 +96,7 @@ class PlayerConnection(
         }, ContextCompat.getMainExecutor(context))
     }
 
-    /** Joue [queue] à partir de [index]. Hors ligne, seuls les titres téléchargés restent dans la file. */
+    /** Plays [queue] starting at [index]. Offline, only downloaded tracks are kept in the queue. */
     fun play(queue: List<Track>, index: Int) {
         val tapped = queue.getOrNull(index) ?: return
         val playable = if (isOnline()) queue else queue.filter { app.store.downloadedFile(it.url) != null }

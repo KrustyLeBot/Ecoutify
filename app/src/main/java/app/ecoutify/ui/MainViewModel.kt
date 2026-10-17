@@ -68,7 +68,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    /** À rappeler au retour dans l'appli : prend en compte l'autorisation d'accès aux fichiers. */
+    /** Call when the app comes back to the foreground: picks up the all-files-access permission. */
     fun refreshStorage() {
         storageOk = app.store.hasStorageAccess()
         viewModelScope.launch {
@@ -83,7 +83,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         return caps?.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) == true
     }
 
-    // --- Recherche & recommandations ---
+    // --- Search & recommendations ---
     fun search() {
         val q = query.trim()
         if (q.isEmpty()) return
@@ -113,11 +113,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    // --- Lecture ---
+    // --- Playback ---
     fun play(queue: List<Track>, index: Int) = player.play(queue, index)
     fun playShuffled(queue: List<Track>) = player.playShuffled(queue)
 
-    // --- Téléchargements ---
+    // --- Downloads ---
     fun download(t: Track) {
         if (!online) message = "Hors ligne : téléchargement impossible" else app.downloads.start(t)
     }

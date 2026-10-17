@@ -11,7 +11,7 @@ import org.schabi.newpipe.extractor.stream.StreamInfo
 import org.schabi.newpipe.extractor.stream.StreamInfoItem
 import java.util.concurrent.ConcurrentHashMap
 
-/** Accès au catalogue YouTube / YouTube Music via NewPipeExtractor. Appels bloquants : à lancer hors du thread UI. */
+/** Access to the YouTube / YouTube Music catalog through NewPipeExtractor. Blocking calls: run off the UI thread. */
 class Catalog(downloader: OkHttpDownloader) {
 
     init {
@@ -21,7 +21,7 @@ class Catalog(downloader: OkHttpDownloader) {
     private val youtube = ServiceList.YouTube
     private val urlCache = ConcurrentHashMap<String, Pair<Long, String>>()
 
-    /** Recherche limitée aux morceaux (filtre « YouTube Music – Titres »). */
+    /** Search restricted to songs (the "YouTube Music – Songs" filter). */
     fun search(query: String): List<Track> {
         val extractor = youtube.getSearchExtractor(
             query, listOf(YoutubeSearchQueryHandlerFactory.MUSIC_SONGS), ""
@@ -30,17 +30,17 @@ class Catalog(downloader: OkHttpDownloader) {
         return extractor.initialPage.items.filterIsInstance<StreamInfoItem>().map(::toTrack)
     }
 
-    /** Titres similaires (colonne « À suivre » de YouTube) : base de la recommandation et de l'autoplay. */
+    /** Similar tracks (YouTube's "up next" column): the basis of recommendations. */
     fun related(url: String): List<Track> =
         StreamInfo.getInfo(youtube, url).relatedItems
             .filterIsInstance<StreamInfoItem>()
-            .filter { it.duration in 60..900 } // écarte shorts, mixes de 3 h, etc.
+            .filter { it.duration in 60..900 } // drops shorts, 3-hour mixes, etc.
             .map(::toTrack)
 
-    /** URL directe du meilleur flux audio (M4A de préférence), mise en cache ~2 h (les URL expirent). */
+    /** Direct URL of the best audio stream (M4A preferred), cached ~2 h (URLs expire). */
     fun audioUrl(watchUrl: String): String = audioStream(watchUrl).first
 
-    /** (url, extension) du meilleur flux audio. */
+    /** (url, extension) of the best audio stream. */
     fun audioStream(watchUrl: String): Pair<String, String> {
         urlCache[watchUrl]?.let { (expires, value) ->
             if (expires > System.currentTimeMillis()) return value.substringBefore('|') to value.substringAfter('|')
@@ -63,7 +63,7 @@ class Catalog(downloader: OkHttpDownloader) {
         thumbnail = i.thumbnails.firstOrNull()?.url,
     )
 
-    /** Retire les mentions « (Official Video) », « [Lyrics] »… des titres YouTube. */
+    /** Strips "(Official Video)", "[Lyrics]"… from YouTube titles. */
     private fun cleanTitle(raw: String): String {
         val noise = Regex("\\s*[\\(\\[][^\\)\\]]*(official|video|audio|lyrics?|clip|visuali[sz]er|4k|hd)[^\\)\\]]*[\\)\\]]", RegexOption.IGNORE_CASE)
         return raw.replace(noise, "").trim().ifEmpty { raw }

@@ -17,9 +17,9 @@ import app.ecoutify.data.YoutubeHttp
 import java.io.IOException
 
 /**
- * Lecture en arrière-plan avec notification et contrôles écran verrouillé.
- * Chaque MediaItem a pour URI l'URL « watch » YouTube ; elle est résolue en fichier local
- * si le morceau est téléchargé, sinon en flux audio direct au moment de la lecture.
+ * Background playback with a notification and lock-screen controls.
+ * Each MediaItem's URI is the YouTube "watch" URL; at playback time it is resolved to the local
+ * file if the track is downloaded, otherwise to the direct audio stream.
  */
 class PlaybackService : MediaSessionService() {
     private var session: MediaSession? = null
@@ -51,7 +51,7 @@ class PlaybackService : MediaSessionService() {
         } catch (e: Exception) {
             throw IOException("Impossible de résoudre le flux audio", e)
         }
-        // La plage demandée par ExoPlayer passe dans l'URL (`range=`), comme le fait NewPipe.
+        // The byte range requested by ExoPlayer goes in the URL (`range=`), as NewPipe does.
         val unset = C.LENGTH_UNSET.toLong()
         val end = if (spec.length != unset) spec.position + spec.length - 1 else null
         return spec.buildUpon()

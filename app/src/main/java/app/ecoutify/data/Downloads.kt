@@ -10,8 +10,8 @@ import okhttp3.OkHttpClient
 import java.io.File
 
 /**
- * Télécharge le flux audio d'origine (M4A/AAC ou Opus) pour l'écoute hors ligne.
- * Pas de conversion MP3 : on garde le fichier tel quel, sans perte de qualité.
+ * Downloads the original audio stream (M4A/AAC or Opus) for offline listening.
+ * No MP3 conversion: the file is kept as is, with no quality loss.
  */
 class Downloads(
     private val catalog: Catalog,
@@ -20,10 +20,10 @@ class Downloads(
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
-    /** url du morceau -> progression 0..100 (absent = pas en cours). */
+    /** Track URL -> progress 0..100 (absent = not downloading). */
     val progress = MutableStateFlow<Map<String, Int>>(emptyMap())
 
-    /** Dernier message d'erreur (consommé par l'UI). */
+    /** Latest error message (consumed by the UI). */
     val errors = MutableStateFlow<String?>(null)
 
     fun start(track: Track) {
@@ -59,7 +59,7 @@ class Downloads(
                                 }
                             }
                         }
-                        if (total == null) break // taille inconnue : une seule requête
+                        if (total == null) break // unknown size: single request
                     }
                 }
                 check(out.renameTo(finalFile)) { "Impossible d'enregistrer le fichier" }

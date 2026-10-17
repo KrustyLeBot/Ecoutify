@@ -12,16 +12,16 @@ import java.io.File
 import java.util.UUID
 
 /**
- * Tout est local (aucun compte).
+ * Everything is local (no account).
  *
- * Les musiques et les playlists vivent dans le dossier public `Ecoutify/` du stockage interne
- * (à la racine, pas dans « Musique ») : il survit à la désinstallation et tout y est redétecté
- * à la réinstallation. Pour cela l'appli demande « l'accès à tous les fichiers » ; tant qu'il
- * n'est pas accordé, un dossier privé est utilisé, puis son contenu est déplacé au moment de l'autorisation.
+ * Music and playlists live in the public `Ecoutify/` folder of internal storage (at the root,
+ * not in "Music"): it survives uninstalling and everything in it is detected again after a
+ * reinstall. This requires the "all files access" permission; until it is granted a private
+ * folder is used, and its content is moved over once permission is given.
  *
- * - `Ecoutify/musique/<artiste> - <titre> [<id YouTube>].m4a` : un fichier par titre téléchargé ;
- *   l'artiste, le titre et l'identifiant se relisent depuis le nom du fichier.
- * - `Ecoutify/playlists.json` : les playlists.
+ * - `Ecoutify/music/<artist> - <title> [<YouTube id>].m4a`: one file per downloaded track;
+ *   artist, title and id are read back from the file name.
+ * - `Ecoutify/playlists.json`: the playlists.
  */
 class Store(private val context: Context) {
     private val prefs = context.getSharedPreferences("ecoutify", Context.MODE_PRIVATE)
@@ -32,7 +32,7 @@ class Store(private val context: Context) {
     private val publicRoot: File
         get() = File(Environment.getExternalStorageDirectory(), "Ecoutify")
 
-    /** L'accès au dossier public `Ecoutify/` est-il autorisé ? */
+    /** Is access to the public `Ecoutify/` folder granted? */
     fun hasStorageAccess(): Boolean =
         if (Build.VERSION.SDK_INT >= 30) Environment.isExternalStorageManager()
         else context.checkSelfPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED
@@ -41,16 +41,16 @@ class Store(private val context: Context) {
         get() = (if (hasStorageAccess()) publicRoot else privateRoot).also { it.mkdirs() }
 
     val musicDir: File
-        get() = File(root, "musique").also { it.mkdirs() }
+        get() = File(root, "music").also { it.mkdirs() }
 
     private val playlistsFile: File
         get() = File(root, "playlists.json")
 
-    /** Déplace vers le dossier public ce qui a été téléchargé avant l'autorisation d'accès. */
+    /** Moves to the public folder whatever was downloaded before access was granted. */
     fun migratePrivateToPublic() {
         if (!hasStorageAccess() || !privateRoot.exists()) return
         runCatching {
-            File(privateRoot, "musique").listFiles()?.forEach { f ->
+            File(privateRoot, "music").listFiles()?.forEach { f ->
                 val target = File(musicDir, f.name)
                 if (!target.exists()) f.copyTo(target)
                 f.delete()
@@ -61,7 +61,7 @@ class Store(private val context: Context) {
         }
     }
 
-    // --- Réglages de lecture ---
+    // --- Playback settings ---
     var shuffle: Boolean
         get() = prefs.getBoolean("shuffle", false)
         set(v) = prefs.edit().putBoolean("shuffle", v).apply()
@@ -70,18 +70,18 @@ class Store(private val context: Context) {
         get() = prefs.getInt("repeat", Player.REPEAT_MODE_OFF)
         set(v) = prefs.edit().putInt("repeat", v).apply()
 
-    // --- Historique ---
+    // --- History ---
     fun history(): List<Track> = readList("history")
 
     fun addToHistory(t: Track) {
         writeList("history", (listOf(t) + history().filter { it.url != t.url }).take(60))
     }
 
-    // --- Recommandations (gardées pour le mode hors ligne) ---
+    // --- Recommendations (kept for offline mode) ---
     fun cachedRecommendations(): List<Track> = readList("recs")
     fun saveRecommendations(list: List<Track>) = writeList("recs", list)
 
-    // --- Téléchargements (relus depuis le dossier à chaque fois) ---
+    // --- Downloads (re-read from the folder each time) ---
     fun downloads(): List<Track> =
         (musicDir.listFiles() ?: emptyArray()).sortedByDescending { it.lastModified() }.mapNotNull { trackOf(it) }
 
@@ -90,7 +90,7 @@ class Store(private val context: Context) {
         return (musicDir.listFiles() ?: emptyArray()).firstOrNull { fileId(it) == id }
     }
 
-    /** Fichier de destination pour [t] (écrit d'abord en `.part`, renommé une fois complet). */
+    /** Destination file for [t] (written as `.part` first, renamed once complete). */
     fun fileFor(t: Track, ext: String): File {
         val id = videoId(t.url) ?: error("URL inconnue")
         fun clean(x: String) = x.replace(Regex("[\\\\/:*?\"<>|\\n\\r]"), "_").replace(" - ", " ").trim()
@@ -161,7 +161,7 @@ class Store(private val context: Context) {
         if (it.id == id) it.copy(tracks = it.tracks.filter { x -> x.url != t.url }) else it
     })
 
-    // --- Utilitaires ---
+    // --- Helpers ---
     private fun readList(key: String): List<Track> {
         val arr = JSONArray(prefs.getString(key, "[]"))
         return (0 until arr.length()).map { Track.fromJson(arr.getJSONObject(it)) }

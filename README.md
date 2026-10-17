@@ -1,23 +1,24 @@
 # Ecoutify
 
-Petit clone de Spotify pour Android : recherche et écoute de musique YouTube **sans pub, sans compte**,
-téléchargement pour l'écoute hors ligne, playlists, et recommandations.
+A tiny Spotify-style music player for Android: search and stream YouTube / YouTube Music
+**with no ads and no account**, download tracks for offline listening, build playlists, and get recommendations.
+The app UI is in French.
 
-## Fonctionnement
+## How it works
 
-- **Recherche & lecture en direct** : [NewPipeExtractor](https://github.com/TeamNewPipe/NewPipeExtractor) interroge YouTube (filtre « Titres » de YouTube Music) et fournit le flux audio, lu par Media3/ExoPlayer, y compris en arrière-plan et écran verrouillé. Aucune clé d'API.
-- **Hors ligne** : le flux audio d'origine (M4A/AAC ou Opus) est téléchargé tel quel, sans conversion, dans le dossier `Ecoutify/` à la racine du stockage (pas dans « Musique »). Il survit à la désinstallation : après réinstallation, musiques et playlists (`Ecoutify/musique/`, `Ecoutify/playlists.json`) sont redétectées. L'appli demande pour cela l'accès à tous les fichiers. Sans connexion, seuls les titres téléchargés sont lus.
-- **Playlists** : locales, avec des titres téléchargés ou non (« Tout télécharger » pour une playlist entière).
-- **Lecteur** : lecture/pause, précédent/suivant, barre de progression, aléatoire, répétition (off / tout / un titre). La file est la liste d'où l'on lance un titre ; en aléatoire le titre suivant est tiré au hasard.
-- **Recommandations** (onglet « Pour toi ») : elles partent uniquement de tes titres téléchargés et de tes playlists (ni recherches ni historique) et reprennent les « titres similaires » proposés par YouTube. Les dernières suggestions restent visibles hors ligne.
+- **Search & live playback**: [NewPipeExtractor](https://github.com/TeamNewPipe/NewPipeExtractor) queries YouTube (using the YouTube Music "Songs" filter) and returns the audio stream, which is played with Media3 / ExoPlayer, including in the background and on the lock screen. No API key is needed and no ads are ever loaded.
+- **Offline**: the original audio stream (M4A/AAC or Opus) is downloaded as is, with no conversion, into an `Ecoutify/` folder at the root of the phone storage (not in "Music"). It survives uninstalling: after a reinstall, music and playlists (`Ecoutify/music/`, `Ecoutify/playlists.json`) are detected again. The app asks for "all files access" for this. Without a connection only downloaded tracks can be played.
+- **Playlists**: local, and can contain downloaded or not-yet-downloaded tracks ("Download all" for a whole playlist).
+- **Player**: play/pause, previous/next, seek bar, shuffle, repeat (off / all / one). The queue is simply the list a track was started from; with shuffle on, the next track is picked at random.
+- **Recommendations** ("Pour toi" tab): based only on your downloaded tracks and playlists (not on searches or listening history), reusing the "similar tracks" YouTube suggests. The last suggestions stay visible offline.
 
-## Obtenir l'APK
+## Getting the APK
 
-La CI GitHub (`.github/workflows/build-apk.yml`) compile l'APK à chaque push :
-onglet **Actions** → dernier run réussi → artefact `ecoutify-debug-apk` → `app-debug.apk`, à installer sur le téléphone.
+GitHub Actions (`.github/workflows/build-apk.yml`) builds the APK on every push:
+**Actions** tab → latest successful run → `ecoutify-debug-apk` artifact → `app-debug.apk`, then install it on the phone.
 
-En local : `./gradlew assembleDebug` (JDK 17 + Android SDK 35).
+Locally: `./gradlew assembleDebug` (JDK 17 + Android SDK 35).
 
-## Avertissement
+## Disclaimer
 
-Contourner la publicité et télécharger depuis YouTube va à l'encontre de ses conditions d'utilisation, et les contenus restent protégés par le droit d'auteur. Usage personnel uniquement.
+Bypassing ads and downloading from YouTube goes against YouTube's terms of service, and the content remains protected by copyright. Personal use only.
