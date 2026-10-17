@@ -141,16 +141,4 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         app.store.removeFromPlaylist(p.id, t)
         playlists = app.store.playlists()
     }
-
-    // --- Réglages facultatifs (ListenBrainz / Last.fm) ---
-    fun accounts(): List<String> = with(app.store) { listOf(lbToken, lastFmKey) }
-
-    fun saveAccounts(lbToken: String, lastFmKey: String) {
-        with(app.store) {
-            this.lbToken = lbToken
-            this.lastFmKey = lastFmKey
-        }
-        message = "Réglages enregistrés"
-        refreshRecommendations()
-    }
 }

@@ -134,13 +134,11 @@ private fun ScreenTitle(title: String, subtitle: String? = null, actions: @Compo
 
 @Composable
 private fun HomeScreen(vm: MainViewModel) {
-    var settings by remember { mutableStateOf(false) }
     Column(Modifier.fillMaxSize()) {
         ScreenTitle(
             "Pour toi",
             if (vm.downloaded.isEmpty()) "Télécharge des titres pour affiner les suggestions" else "D'après tes titres téléchargés et tes playlists",
         ) {
-            IconButton(onClick = { settings = true }) { Icon(Icons.Default.Settings, "Réglages") }
             IconButton(onClick = vm::refreshRecommendations, enabled = vm.online) {
                 Icon(Icons.Default.Refresh, "Actualiser")
             }
@@ -151,32 +149,6 @@ private fun HomeScreen(vm: MainViewModel) {
         }
         TrackList(vm, vm.recommendations)
     }
-    if (settings) AccountsDialog(vm) { settings = false }
-}
-
-@Composable
-private fun AccountsDialog(vm: MainViewModel, onDismiss: () -> Unit) {
-    val initial = remember { vm.accounts() }
-    var lbToken by remember { mutableStateOf(initial[0]) }
-    var lfmKey by remember { mutableStateOf(initial[1]) }
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Réglages facultatifs") },
-        text = {
-            Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text(
-                    "Les suggestions fonctionnent sans rien renseigner (ListenBrainz, sans compte). " +
-                        "Une clé Last.fm ajoute une 2e source d'artistes similaires. " +
-                        "Un jeton ListenBrainz enregistre seulement tes écoutes sur ton profil, sans influencer les suggestions.",
-                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                OutlinedTextField(lfmKey, { lfmKey = it }, label = { Text("Last.fm : clé d'API") }, singleLine = true)
-                OutlinedTextField(lbToken, { lbToken = it }, label = { Text("ListenBrainz : jeton utilisateur") }, singleLine = true)
-            }
-        },
-        confirmButton = { TextButton(onClick = { vm.saveAccounts(lbToken, lfmKey); onDismiss() }) { Text("Enregistrer") } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Annuler") } },
-    )
 }
 
 // ---------------------------------------------------------------- Recherche

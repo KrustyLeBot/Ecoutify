@@ -14,6 +14,6 @@ class EcoutifyApp : Application() {
     val store by lazy { Store(this) }
     val catalog by lazy { Catalog(OkHttpDownloader(http)) }
     val downloads by lazy { Downloads(catalog, store, http) }
-    val discovery by lazy { Discovery(http, store) }
+    val discovery by lazy { Discovery(http) }
     val recommender by lazy { Recommender(catalog, store, discovery) }
 }

@@ -10,7 +10,7 @@ import kotlinx.coroutines.withContext
 
 /**
  * Recommandations : on part uniquement de tes titres téléchargés et de tes playlists
- * (ni recherches ni historique d'écoute), on demande à ListenBrainz et Last.fm
+ * (ni recherches ni historique d'écoute), on demande à ListenBrainz
  * quels artistes y ressemblent, puis on cherche leurs titres sur YouTube.
  * Chaque actualisation tire d'autres artistes de départ, donc d'autres suggestions.
  */
@@ -26,7 +26,7 @@ class Recommender(
         val seen = (known + store.history()).map { it.url }.toMutableSet()
 
         val trackSeeds = known.shuffled().distinctBy { it.artist.lowercase() }.take(5)
-        val seeds = trackSeeds.map { Discovery.Seed(it.artist, title = it.title) }
+        val seeds = trackSeeds.map { Discovery.Seed(it.artist, it.title) }
         if (seeds.isEmpty()) {
             return@withContext runCatching { catalog.search("top hits musique") }.getOrDefault(emptyList())
         }
