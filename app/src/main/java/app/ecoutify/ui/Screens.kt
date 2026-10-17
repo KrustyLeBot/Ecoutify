@@ -509,7 +509,7 @@ private fun PlayerScreen(vm: MainViewModel, onClose: () -> Unit) {
         }
         Spacer(Modifier.height(16.dp))
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = { player.setShuffle(!player.shuffle) }) {
+            IconButton(onClick = { player.enableShuffle(!player.shuffle) }) {
                 Icon(Icons.Default.Shuffle, "Aléatoire", tint = if (player.shuffle) accent else dim)
             }
             IconButton(onClick = player::previous, Modifier.size(56.dp)) {

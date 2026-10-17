@@ -125,7 +125,7 @@ class PlayerConnection(
 
     fun playShuffled(queue: List<Track>) {
         if (queue.isEmpty()) return
-        setShuffle(true)
+        enableShuffle(true)
         play(queue, queue.indices.random())
     }
 
@@ -141,7 +141,7 @@ class PlayerConnection(
 
     fun seekTo(ms: Long) { controller?.seekTo(ms) }
 
-    fun setShuffle(on: Boolean) {
+    fun enableShuffle(on: Boolean) {
         app.store.shuffle = on
         shuffle = on
         controller?.shuffleModeEnabled = on
