@@ -63,7 +63,19 @@ class Catalog(downloader: OkHttpDownloader, private val http: OkHttpClient) {
             return true
         }
 
-        // 1) Android VR InnerTube client: serves plain audio URLs without a PoToken.
+        val info = StreamInfo.getInfo(youtube, watchUrl)
+        val candidates = info.audioStreams
+            .filter { it.deliveryMethod == DeliveryMethod.PROGRESSIVE_HTTP && it.isUrl }
+            .sortedWith(compareByDescending<AudioStream> { it.format == MediaFormat.M4A }.thenByDescending { it.averageBitrate })
+            .take(3)
+
+        // 1) The very first approach, which worked: plain GET with a browser user agent and nothing else.
+        candidates.firstOrNull()?.let { c ->
+            val source = AudioSource(c.content, c.format?.suffix ?: "m4a", mapOf("User-Agent" to OkHttpDownloader.USER_AGENT), false)
+            if (accept(source, "plain")) return source
+        }
+
+        // 2) Android VR InnerTube client: serves plain audio URLs without a PoToken.
         runCatching { vrCandidate(watchUrl) }.getOrNull()?.let { (url, ext) ->
             for (post in listOf(false, true)) {
                 val source = AudioSource(url, ext, mapOf("User-Agent" to VR_USER_AGENT, "Accept-Encoding" to "identity"), post)
@@ -71,17 +83,12 @@ class Catalog(downloader: OkHttpDownloader, private val http: OkHttpClient) {
             }
         }
 
-        // 2) NewPipeExtractor streams, with the request styles of the different clients.
-        val info = StreamInfo.getInfo(youtube, watchUrl)
-        val candidates = info.audioStreams
-            .filter { it.deliveryMethod == DeliveryMethod.PROGRESSIVE_HTTP && it.isUrl }
-            .sortedWith(compareByDescending<AudioStream> { it.format == MediaFormat.M4A }.thenByDescending { it.averageBitrate })
-            .take(3)
+        // 3) NewPipe-style requests, with the request styles of the different clients.
         for (c in candidates) {
             val url = c.content
             val ext = c.format?.suffix ?: "m4a"
             val agents = listOf(YoutubeHttp.clientUserAgent(url), OkHttpDownloader.USER_AGENT).distinct()
-            for (post in listOf(true, false)) for (agent in agents) {
+            for (post in listOf(false, true)) for (agent in agents) {
                 val source = AudioSource(url, ext, YoutubeHttp.headers(url, agent), post)
                 if (accept(source, "np${c.itagItem?.id}-${if (post) "post" else "get"}")) return source
             }
