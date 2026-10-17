@@ -9,8 +9,8 @@ téléchargement pour l'écoute hors ligne, playlists, et recommandations.
 - **Hors ligne** : le flux audio d'origine (M4A/AAC ou Opus) est téléchargé tel quel, sans conversion. Sans connexion, seuls les titres téléchargés sont lus.
 - **Playlists** : locales, avec des titres téléchargés ou non (« Tout télécharger » pour une playlist entière).
 - **Lecteur** : lecture/pause, précédent/suivant, barre de progression, aléatoire, répétition (off / tout / un titre). La file est la liste d'où l'on lance un titre ; en aléatoire le titre suivant est tiré au hasard.
-- **Recommandations** (onglet « Pour toi ») : à partir des artistes de tes titres téléchargés et de tes playlists, [ListenBrainz](https://listenbrainz.org) (artistes similaires, sans compte) et [Last.fm](https://www.last.fm) (clé d'API gratuite, facultative) donnent des artistes proches, dont les titres sont cherchés sur YouTube. Les dernières suggestions restent visibles hors ligne.
-- **Comptes facultatifs** (⚙ dans « Pour toi ») : utilisateur ListenBrainz et/ou Last.fm pour partir de ton top artistes ; jeton ListenBrainz pour y enregistrer tes écoutes.
+- **Recommandations** (onglet « Pour toi ») : elles partent uniquement de tes titres téléchargés et de tes playlists (ni recherches ni historique). [ListenBrainz](https://listenbrainz.org) (sans compte) et, si tu mets une clé d'API gratuite dans ⚙, [Last.fm](https://www.last.fm) donnent des artistes proches ; leurs titres sont cherchés sur YouTube. Les dernières suggestions restent visibles hors ligne.
+- **Réglages facultatifs** (⚙) : clé d'API Last.fm (2e source de suggestions) et jeton ListenBrainz (enregistre tes écoutes sur ton profil, sans effet sur les suggestions).
 
 ## Obtenir l'APK
 

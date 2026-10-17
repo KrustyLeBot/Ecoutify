@@ -138,7 +138,7 @@ private fun HomeScreen(vm: MainViewModel) {
     Column(Modifier.fillMaxSize()) {
         ScreenTitle(
             "Pour toi",
-            if (vm.downloaded.isEmpty()) "Télécharge des titres pour affiner les suggestions" else "D'après tes titres, tes playlists et ListenBrainz / Last.fm",
+            if (vm.downloaded.isEmpty()) "Télécharge des titres pour affiner les suggestions" else "D'après tes titres téléchargés et tes playlists",
         ) {
             IconButton(onClick = { settings = true }) { Icon(Icons.Default.Settings, "Réglages") }
             IconButton(onClick = vm::refreshRecommendations, enabled = vm.online) {
@@ -157,27 +157,24 @@ private fun HomeScreen(vm: MainViewModel) {
 @Composable
 private fun AccountsDialog(vm: MainViewModel, onDismiss: () -> Unit) {
     val initial = remember { vm.accounts() }
-    var lbUser by remember { mutableStateOf(initial[0]) }
-    var lbToken by remember { mutableStateOf(initial[1]) }
-    var lfmKey by remember { mutableStateOf(initial[2]) }
-    var lfmUser by remember { mutableStateOf(initial[3]) }
+    var lbToken by remember { mutableStateOf(initial[0]) }
+    var lfmKey by remember { mutableStateOf(initial[1]) }
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Recommandations") },
+        title = { Text("Réglages facultatifs") },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(
-                    "Tout est facultatif : les suggestions marchent sans compte (ListenBrainz). " +
-                        "Renseigne tes comptes pour partir de ton top artistes, et un jeton ListenBrainz pour enregistrer tes écoutes.",
+                    "Les suggestions fonctionnent sans rien renseigner (ListenBrainz, sans compte). " +
+                        "Une clé Last.fm ajoute une 2e source d'artistes similaires. " +
+                        "Un jeton ListenBrainz enregistre seulement tes écoutes sur ton profil, sans influencer les suggestions.",
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
-                OutlinedTextField(lbUser, { lbUser = it }, label = { Text("ListenBrainz : utilisateur") }, singleLine = true)
-                OutlinedTextField(lbToken, { lbToken = it }, label = { Text("ListenBrainz : jeton (écoutes)") }, singleLine = true)
                 OutlinedTextField(lfmKey, { lfmKey = it }, label = { Text("Last.fm : clé d'API") }, singleLine = true)
-                OutlinedTextField(lfmUser, { lfmUser = it }, label = { Text("Last.fm : utilisateur") }, singleLine = true)
+                OutlinedTextField(lbToken, { lbToken = it }, label = { Text("ListenBrainz : jeton utilisateur") }, singleLine = true)
             }
         },
-        confirmButton = { TextButton(onClick = { vm.saveAccounts(lbUser, lbToken, lfmKey, lfmUser); onDismiss() }) { Text("Enregistrer") } },
+        confirmButton = { TextButton(onClick = { vm.saveAccounts(lbToken, lfmKey); onDismiss() }) { Text("Enregistrer") } },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Annuler") } },
     )
 }

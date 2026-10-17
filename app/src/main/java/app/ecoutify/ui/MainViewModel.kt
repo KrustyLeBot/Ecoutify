@@ -142,15 +142,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         playlists = app.store.playlists()
     }
 
-    // --- Comptes facultatifs (ListenBrainz / Last.fm) ---
-    fun accounts(): List<String> = with(app.store) { listOf(lbUser, lbToken, lastFmKey, lastFmUser) }
+    // --- Réglages facultatifs (ListenBrainz / Last.fm) ---
+    fun accounts(): List<String> = with(app.store) { listOf(lbToken, lastFmKey) }
 
-    fun saveAccounts(lbUser: String, lbToken: String, lastFmKey: String, lastFmUser: String) {
+    fun saveAccounts(lbToken: String, lastFmKey: String) {
         with(app.store) {
-            this.lbUser = lbUser
             this.lbToken = lbToken
             this.lastFmKey = lastFmKey
-            this.lastFmUser = lastFmUser
         }
         message = "Réglages enregistrés"
         refreshRecommendations()

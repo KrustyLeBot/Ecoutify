@@ -12,14 +12,14 @@ import org.json.JSONTokener
 
 /**
  * Sources de recommandation : ListenBrainz (artistes similaires, sans clé ni compte)
- * et Last.fm (clé d'API gratuite à saisir dans les réglages). Les comptes sont facultatifs :
- * ils servent à scrobbler les écoutes (ListenBrainz) et à partir de ton top artistes.
+ * et Last.fm (clé d'API gratuite facultative, réglages). Un jeton ListenBrainz, facultatif lui aussi,
+ * sert uniquement à enregistrer tes écoutes sur ton profil.
  * Appels bloquants : à lancer hors du thread UI.
  */
 class Discovery(private val http: OkHttpClient, private val store: Store) {
 
-    /** Point de départ d'une recommandation : un artiste, avec éventuellement son MBID et un titre connu. */
-    data class Seed(val name: String, val mbid: String? = null, val title: String? = null)
+    /** Point de départ d'une recommandation : un artiste et un de ses titres (sert à retrouver son MBID). */
+    data class Seed(val name: String, val title: String? = null)
 
     // ---------------------------------------------------------------- artistes similaires
 
@@ -27,7 +27,7 @@ class Discovery(private val http: OkHttpClient, private val store: Store) {
     fun similarArtists(seed: Seed): List<String> {
         val out = LinkedHashSet<String>()
         runCatching {
-            val mbid = seed.mbid ?: seed.title?.let { listenBrainzArtistMbid(seed.name, it) }
+            val mbid = seed.title?.let { listenBrainzArtistMbid(seed.name, it) }
             if (mbid != null) out += listenBrainzSimilar(mbid)
         }
         if (store.lastFmKey.isNotBlank()) runCatching { out += lastFmSimilar(seed.name) }
@@ -59,33 +59,6 @@ class Discovery(private val http: OkHttpClient, private val store: Store) {
         val url = lastFmUrl("artist.getsimilar").addQueryParameter("artist", artist).addQueryParameter("limit", "25").build()
         val arr = (getJson(url) as? JSONObject)?.optJSONObject("similarartists")?.optJSONArray("artist") ?: return emptyList()
         return (0 until arr.length()).mapNotNull { arr.optJSONObject(it)?.optString("name")?.takeIf { n -> n.isNotBlank() } }
-    }
-
-    // ---------------------------------------------------------------- goûts du compte
-
-    /** Tes artistes les plus écoutés sur ListenBrainz et/ou Last.fm (si des comptes sont renseignés). */
-    fun topArtists(): List<Seed> {
-        val out = mutableListOf<Seed>()
-        if (store.lbUser.isNotBlank()) runCatching {
-            val url = "https://api.listenbrainz.org/1/stats/user/${store.lbUser.trim()}/artists".toHttpUrl().newBuilder()
-                .addQueryParameter("range", "all_time").addQueryParameter("count", "20").build()
-            val arr = (getJson(url) as? JSONObject)?.optJSONObject("payload")?.optJSONArray("artists")
-            if (arr != null) for (i in 0 until arr.length()) {
-                val o = arr.optJSONObject(i) ?: continue
-                val name = o.optString("artist_name")
-                if (name.isNotBlank()) out += Seed(name, o.optString("artist_mbid").takeIf { it.isNotBlank() })
-            }
-        }
-        if (store.lastFmKey.isNotBlank() && store.lastFmUser.isNotBlank()) runCatching {
-            val url = lastFmUrl("user.gettopartists").addQueryParameter("user", store.lastFmUser.trim())
-                .addQueryParameter("period", "overall").addQueryParameter("limit", "20").build()
-            val arr = (getJson(url) as? JSONObject)?.optJSONObject("topartists")?.optJSONArray("artist")
-            if (arr != null) for (i in 0 until arr.length()) {
-                val name = arr.optJSONObject(i)?.optString("name").orEmpty()
-                if (name.isNotBlank()) out += Seed(name)
-            }
-        }
-        return out
     }
 
     // ---------------------------------------------------------------- scrobbles ListenBrainz

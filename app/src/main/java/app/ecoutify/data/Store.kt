@@ -23,11 +23,7 @@ class Store(private val context: Context) {
         get() = prefs.getInt("repeat", Player.REPEAT_MODE_OFF)
         set(v) = prefs.edit().putInt("repeat", v).apply()
 
-    // --- Comptes facultatifs (ListenBrainz / Last.fm) ---
-    var lbUser: String
-        get() = prefs.getString("lb_user", "").orEmpty()
-        set(v) = prefs.edit().putString("lb_user", v.trim()).apply()
-
+    // --- Réglages facultatifs (ListenBrainz / Last.fm) ---
     var lbToken: String
         get() = prefs.getString("lb_token", "").orEmpty()
         set(v) = prefs.edit().putString("lb_token", v.trim()).apply()
@@ -35,10 +31,6 @@ class Store(private val context: Context) {
     var lastFmKey: String
         get() = prefs.getString("lfm_key", "").orEmpty()
         set(v) = prefs.edit().putString("lfm_key", v.trim()).apply()
-
-    var lastFmUser: String
-        get() = prefs.getString("lfm_user", "").orEmpty()
-        set(v) = prefs.edit().putString("lfm_user", v.trim()).apply()
 
     // --- Historique ---
     fun history(): List<Track> = readList("history")
