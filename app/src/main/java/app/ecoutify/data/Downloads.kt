@@ -18,6 +18,7 @@ class Downloads(
     private val catalog: Catalog,
     private val store: Store,
     private val client: OkHttpClient,
+    private val covers: Covers,
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
@@ -33,6 +34,7 @@ class Downloads(
         scope.launch {
             var out: File? = null
             try {
+                runCatching { covers.save(track) }
                 val (streamUrl, ext) = catalog.audioStream(track.url)
                 val finalFile = store.fileFor(track, ext)
                 val partFile = File(finalFile.parentFile, finalFile.name + ".part")

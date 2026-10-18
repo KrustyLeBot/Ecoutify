@@ -31,6 +31,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -41,6 +43,7 @@ import androidx.compose.ui.unit.dp
 import androidx.media3.common.Player
 import app.ecoutify.data.Playlist
 import app.ecoutify.data.Track
+import coil3.compose.AsyncImage
 import kotlinx.coroutines.delay
 
 private enum class Tab(val label: String, val icon: ImageVector) {
@@ -325,6 +328,20 @@ private fun ListDetail(vm: MainViewModel, title: String, tracks: List<Track>, pl
 
 // ---------------------------------------------------------------- Track list
 
+/** Square cover with a music-note placeholder underneath while the image loads (or when there is none). */
+@Composable
+private fun Cover(model: String?, modifier: Modifier, corner: Dp = 8.dp) {
+    Box(
+        modifier.clip(RoundedCornerShape(corner)).background(MaterialTheme.colorScheme.surfaceContainerHigh),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(Icons.Default.MusicNote, null, Modifier.fillMaxSize(0.5f), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+        if (model != null) {
+            AsyncImage(model = model, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+        }
+    }
+}
+
 @Composable
 private fun EmptyHint(text: String) {
     Text(text, Modifier.padding(horizontal = 20.dp, vertical = 16.dp), color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -355,8 +372,13 @@ private fun TrackRow(vm: MainViewModel, track: Track, queue: List<Track>, index:
             .padding(start = 20.dp, top = 6.dp, bottom = 6.dp, end = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Box(Modifier.size(24.dp), contentAlignment = Alignment.Center) {
-            if (playing) Icon(Icons.Default.GraphicEq, "En lecture", tint = MaterialTheme.colorScheme.primary)
+        Box(Modifier.size(52.dp), contentAlignment = Alignment.Center) {
+            Cover(vm.coverModel(track), Modifier.fillMaxSize())
+            if (playing) {
+                Box(Modifier.fillMaxSize().clip(RoundedCornerShape(8.dp)).background(Color.Black.copy(alpha = 0.5f)), contentAlignment = Alignment.Center) {
+                    Icon(Icons.Default.GraphicEq, "En lecture", tint = Color.White)
+                }
+            }
         }
         Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f)) {
@@ -465,7 +487,9 @@ private fun MiniPlayer(vm: MainViewModel, onOpen: () -> Unit) {
                 progress = { if (dur > 0) pos.toFloat() / dur else 0f },
                 modifier = Modifier.fillMaxWidth().height(2.dp),
             )
-            Row(Modifier.fillMaxWidth().padding(start = 20.dp, end = 4.dp, top = 4.dp, bottom = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+            Row(Modifier.fillMaxWidth().padding(start = 12.dp, end = 4.dp, top = 4.dp, bottom = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                Cover(vm.coverModel(track), Modifier.size(44.dp))
+                Spacer(Modifier.width(12.dp))
                 Column(Modifier.weight(1f)) {
                     Text(track.title, maxLines = 1, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.Medium)
                     Text(track.artist, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -497,7 +521,10 @@ private fun PlayerScreen(vm: MainViewModel, onClose: () -> Unit) {
         IconButton(onClick = onClose, Modifier.padding(top = 8.dp)) {
             Icon(Icons.Default.KeyboardArrowDown, "Fermer", Modifier.size(32.dp))
         }
-        Spacer(Modifier.weight(1f))
+        Box(Modifier.weight(1f).fillMaxWidth().padding(vertical = 8.dp), contentAlignment = Alignment.Center) {
+            Cover(track?.let { vm.coverModel(it) }, Modifier.aspectRatio(1f), corner = 20.dp)
+        }
+        Spacer(Modifier.height(16.dp))
         Text(
             track?.title ?: "Rien en lecture", style = MaterialTheme.typography.headlineMedium,
             fontWeight = FontWeight.Bold, maxLines = 3, overflow = TextOverflow.Ellipsis,

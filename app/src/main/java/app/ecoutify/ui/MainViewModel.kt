@@ -15,6 +15,7 @@ import app.ecoutify.data.Playlist
 import app.ecoutify.data.Track
 import app.ecoutify.playback.PlayerConnection
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -34,6 +35,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     /** Incremented each time text is shared to the app, so the UI can jump to the search tab. */
     var shareRequest by mutableIntStateOf(0)
         private set
+    private var coverVersion by mutableIntStateOf(0)
+    private var coverJob: Job? = null
     var results by mutableStateOf<List<Track>>(emptyList())
         private set
     var searching by mutableStateOf(false)
@@ -54,6 +57,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         connectivity.registerDefaultNetworkCallback(object : ConnectivityManager.NetworkCallback() {
             override fun onAvailable(network: Network) {
                 online = true
+                ensureCovers()
             }
 
             override fun onLost(network: Network) {
@@ -66,6 +70,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 downloading = it
                 downloaded = app.store.downloads()
             }
+        }
+        viewModelScope.launch {
+            app.covers.version.collect { coverVersion = it }
         }
         viewModelScope.launch {
             app.downloads.errors.collect { e -> if (e != null) message = e }
@@ -82,6 +89,21 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             }
             downloaded = app.store.downloads()
             playlists = app.store.playlists()
+            ensureCovers()
+        }
+    }
+
+    /** Image to show for [t]: the saved cover file when there is one, else its online image. */
+    fun coverModel(t: Track): String? {
+        if (coverVersion < 0) return null // read so that Compose refreshes when a cover gets saved
+        return app.covers.model(t)
+    }
+
+    /** Fetches, in the background, the covers missing for playlist and downloaded tracks (needs a connection). */
+    private fun ensureCovers() {
+        if (coverJob?.isActive == true || !checkOnline()) return
+        coverJob = viewModelScope.launch(Dispatchers.IO) {
+            runCatching { app.covers.ensure(app.store.playlists().flatMap { it.tracks } + app.store.downloads()) }
         }
     }
 
@@ -165,6 +187,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         app.store.addToPlaylist(p.id, t)
         playlists = app.store.playlists()
         message = "Ajouté à « ${p.name} »"
+        viewModelScope.launch(Dispatchers.IO) { runCatching { app.covers.save(t) } }
     }
 
     fun removeFromPlaylist(p: Playlist, t: Track) {
@@ -175,7 +198,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     /** Downloads only exist for tracks in a playlist: free the file once no playlist has the track. */
     private fun deleteIfInNoPlaylist(t: Track) {
-        if (playlists.none { pl -> pl.tracks.any { it.url == t.url } } && isDownloaded(t)) deleteDownload(t)
+        if (playlists.none { pl -> pl.tracks.any { it.url == t.url } }) {
+            if (isDownloaded(t)) deleteDownload(t)
+            app.store.coverFile(t.url)?.delete()
+        }
     }
 
     /**

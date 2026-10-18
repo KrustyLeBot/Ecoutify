@@ -2,6 +2,7 @@ package app.ecoutify.playback
 
 import android.content.ComponentName
 import android.content.Context
+import android.net.Uri
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -166,12 +167,20 @@ class PlayerConnection(
         title = item.mediaMetadata.title?.toString().orEmpty(),
         artist = item.mediaMetadata.artist?.toString().orEmpty(),
         durationSec = 0,
-        thumbnail = null,
+        thumbnail = item.mediaMetadata.artworkUri?.toString()?.takeIf { it.startsWith("http") },
     )
 
     private fun mediaItem(t: Track) = MediaItem.Builder()
         .setMediaId(t.url)
         .setUri(t.url)
-        .setMediaMetadata(MediaMetadata.Builder().setTitle(t.title).setArtist(t.artist).build())
+        .setMediaMetadata(
+            MediaMetadata.Builder().setTitle(t.title).setArtist(t.artist)
+                .setArtworkUri(artworkOf(t))
+                .build()
+        )
         .build()
+
+    /** Cover for the notification / lock screen: the saved file if any, else the online image. */
+    private fun artworkOf(t: Track): Uri? =
+        app.store.coverFile(t.url)?.takeIf { it.exists() }?.let(Uri::fromFile) ?: t.thumbnail?.let(Uri::parse)
 }

@@ -21,6 +21,7 @@ import java.util.UUID
  *
  * - `Ecoutify/music/<artist> - <title> [<YouTube id>].m4a`: one file per downloaded track;
  *   artist, title and id are read back from the file name.
+ * - `Ecoutify/covers/<YouTube id>.jpg`: cover images (so they are available offline and after a reinstall);
  * - `Ecoutify/playlists.json`: the playlists.
  */
 class Store(private val context: Context) {
@@ -43,6 +44,12 @@ class Store(private val context: Context) {
     val musicDir: File
         get() = File(root, "music").also { it.mkdirs() }
 
+    private val coversDir: File
+        get() = File(root, "covers")
+
+    /** Where the cover of [url] is (or will be) saved; null if the URL has no video id. */
+    fun coverFile(url: String): File? = videoId(url)?.let { File(coversDir, "$it.jpg") }
+
     private val playlistsFile: File
         get() = File(root, "playlists.json")
 
@@ -52,6 +59,11 @@ class Store(private val context: Context) {
         runCatching {
             File(privateRoot, "music").listFiles()?.forEach { f ->
                 val target = File(musicDir, f.name)
+                if (!target.exists()) f.copyTo(target)
+                f.delete()
+            }
+            File(privateRoot, "covers").listFiles()?.forEach { f ->
+                val target = File(coversDir.also { it.mkdirs() }, f.name)
                 if (!target.exists()) f.copyTo(target)
                 f.delete()
             }

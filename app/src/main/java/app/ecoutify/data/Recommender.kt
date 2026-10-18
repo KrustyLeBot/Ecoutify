@@ -8,7 +8,7 @@ import kotlinx.coroutines.withContext
 
 /**
  * Recommendations: start only from downloaded tracks and playlists (no searches, no listening
- * history) and reuse the "similar tracks" YouTube suggests.
+ * history) and reuse the YouTube Music "radio" of each seed track, keeping music only.
  * Each refresh draws different seed tracks, hence different suggestions.
  */
 class Recommender(private val catalog: Catalog, private val store: Store) {
@@ -22,12 +22,16 @@ class Recommender(private val catalog: Catalog, private val store: Store) {
             return@withContext runCatching { catalog.search("top hits musique") }.getOrDefault(emptyList())
         }
         val lists = coroutineScope {
-            seeds.map { s -> async { runCatching { catalog.related(s.url) }.getOrDefault(emptyList()) } }.awaitAll()
+            seeds.map { s -> async { runCatching { catalog.similar(s.url) }.getOrDefault(emptyList()) } }.awaitAll()
         }
         // interleave the lists to vary artists
         val out = mutableListOf<Track>()
+        val songs = HashSet<String>() // same song uploaded by several channels
         for (i in 0 until (lists.maxOfOrNull { it.size } ?: 0)) {
-            for (l in lists) l.getOrNull(i)?.let { if (seen.add(it.url)) out += it }
+            for (l in lists) l.getOrNull(i)?.let {
+                val key = (it.artist + it.title).lowercase().filter(Char::isLetterOrDigit)
+                if (seen.add(it.url) && songs.add(key)) out += it
+            }
         }
         out.take(40)
     }
