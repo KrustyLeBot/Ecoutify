@@ -13,6 +13,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import app.ecoutify.EcoutifyApp
 import app.ecoutify.data.Playlist
+import app.ecoutify.data.Updater
 import app.ecoutify.data.Track
 import app.ecoutify.playback.PlayerConnection
 import app.ecoutify.widget.PlaylistWidgetProvider
@@ -21,6 +22,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.io.File
+import android.content.Intent
 
 class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val app = application as EcoutifyApp
@@ -39,6 +42,17 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     var shareRequest by mutableIntStateOf(0)
         private set
     private var coverVersion by mutableIntStateOf(0)
+
+    // --- App updates ---
+    val currentBuild = app.updater.currentBuild()
+    var updateAvailable by mutableStateOf<Updater.Release?>(null)
+        private set
+    var updateStatus by mutableStateOf<String?>(null)
+        private set
+    var updateProgress by mutableStateOf<Int?>(null)
+        private set
+    /** A downloaded update waiting to be handed to the system installer (consumed by the UI). */
+    var pendingInstall by mutableStateOf<File?>(null)
     private var coverJob: Job? = null
     var results by mutableStateOf<List<Track>>(emptyList())
         private set
@@ -232,4 +246,41 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val target = app.store.playlists().firstOrNull { it.name == "Récupérés" } ?: app.store.createPlaylist("Récupérés")
         orphans.forEach { app.store.addToPlaylist(target.id, it) }
     }
+
+    // --- App updates ---
+    /** Looks for a newer build in the `latest` GitHub release. [silent]: no message unless one is found. */
+    fun checkUpdate(silent: Boolean = false) {
+        if (!silent) updateStatus = "Recherche en cours…"
+        viewModelScope.launch {
+            try {
+                val release = withContext(Dispatchers.IO) { app.updater.latest() }
+                if (release != null && release.build > currentBuild) {
+                    updateAvailable = release
+                    updateStatus = "Mise à jour disponible : build ${release.build}"
+                } else {
+                    updateAvailable = null
+                    if (!silent) updateStatus = "Tu as la dernière version (build $currentBuild)"
+                }
+            } catch (e: Exception) {
+                if (!silent) updateStatus = "Vérification impossible : ${e.message}"
+            }
+        }
+    }
+
+    fun downloadUpdate() {
+        val release = updateAvailable ?: return
+        if (updateProgress != null) return
+        updateProgress = 0
+        viewModelScope.launch {
+            try {
+                pendingInstall = withContext(Dispatchers.IO) { app.updater.download(release) { updateProgress = it } }
+            } catch (e: Exception) {
+                message = "Téléchargement de la mise à jour impossible : ${e.message}"
+            } finally {
+                updateProgress = null
+            }
+        }
+    }
+
+    fun installIntent(file: File): Intent = app.updater.installIntent(file)
 }

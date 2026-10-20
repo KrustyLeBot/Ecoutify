@@ -16,8 +16,9 @@ The app UI is in French.
 
 ## Getting the APK
 
-GitHub Actions (`.github/workflows/build-apk.yml`) builds the APK on every push:
-**Actions** tab → latest successful run → `ecoutify-debug-apk` artifact → `app-debug.apk`, then install it on the phone.
+GitHub Actions (`.github/workflows/build-apk.yml`) builds the APK on every push to `main`. When the build succeeds, the APK is published as a plain `ecoutify.apk` in the **`latest` release** (https://github.com/KrustyLeBot/Ecoutify/releases/tag/latest), replacing the previous one. Download it from there and install it on the phone (a zip copy also stays in the run's artifacts for 7 days as a fallback).
+
+**Updates from the app**: Library tab → "Mise à jour" → "Vérifier" (the app also checks quietly at startup and shows a dot on the Library tab when a newer build exists). It downloads the APK into the app cache and opens Android's installer; the first time, Android asks to allow Ecoutify to install apps. The downloaded file is deleted at the next app start once the installed build has caught up with it.
 
 Every build is signed with the same key (`app/ecoutify.jks`, committed on purpose for this personal app) and its version code is the CI run number, so a newer APK installs as an update over the previous one.
 

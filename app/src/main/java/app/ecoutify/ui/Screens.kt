@@ -70,6 +70,17 @@ fun EcoutifyScreen(vm: MainViewModel) {
             vm.message = null
         }
     }
+    val context = LocalContext.current
+    LaunchedEffect(vm.pendingInstall) {
+        val apk = vm.pendingInstall ?: return@LaunchedEffect
+        vm.pendingInstall = null
+        if (context.packageManager.canRequestPackageInstalls()) {
+            context.startActivity(vm.installIntent(apk))
+        } else {
+            vm.message = "Autorise Ecoutify à installer des applications, puis relance la mise à jour"
+            context.startActivity(Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:${context.packageName}")))
+        }
+    }
     LaunchedEffect(vm.shareRequest) {
         if (vm.shareRequest > 0) {
             tab = Tab.Search
@@ -94,7 +105,11 @@ fun EcoutifyScreen(vm: MainViewModel) {
                                     if (tab == it && it == Tab.Library) openList = null
                                     tab = it
                                 },
-                                icon = { Icon(it.icon, it.label) },
+                                icon = {
+                                    BadgedBox(badge = { if (it == Tab.Library && vm.updateAvailable != null) Badge() }) {
+                                        Icon(it.icon, it.label)
+                                    }
+                                },
                                 label = { Text(it.label) },
                             )
                         }
@@ -255,6 +270,7 @@ private fun LibraryHome(vm: MainViewModel, setOpen: (String?) -> Unit) {
                     onLongClick = { toDelete = p },
                 )
             }
+            item { UpdateRow(vm) }
             if (vm.playlists.isEmpty()) {
                 item { EmptyHint("Crée une playlist avec +, ajoute-y des titres (menu ⋮), puis télécharge-les.") }
             }
@@ -269,6 +285,32 @@ private fun LibraryHome(vm: MainViewModel, setOpen: (String?) -> Unit) {
             confirmButton = { TextButton(onClick = { vm.deletePlaylist(p); toDelete = null }) { Text("Supprimer") } },
             dismissButton = { TextButton(onClick = { toDelete = null }) { Text("Annuler") } },
         )
+    }
+}
+
+@Composable
+private fun UpdateRow(vm: MainViewModel) {
+    Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+        Box(
+            Modifier.size(48.dp).clip(RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.surfaceContainerHigh),
+            contentAlignment = Alignment.Center,
+        ) { Icon(Icons.Default.SystemUpdate, null, tint = MaterialTheme.colorScheme.secondary) }
+        Spacer(Modifier.width(16.dp))
+        Column(Modifier.weight(1f)) {
+            Text("Mise à jour", style = MaterialTheme.typography.titleMedium)
+            Text(
+                vm.updateStatus ?: "Version actuelle : build ${vm.currentBuild}",
+                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        val release = vm.updateAvailable
+        if (release != null) {
+            Button(onClick = vm::downloadUpdate, enabled = vm.updateProgress == null) {
+                Text(vm.updateProgress?.let { "$it %" } ?: "Installer (${release.sizeBytes / 1_000_000} Mo)")
+            }
+        } else {
+            TextButton(onClick = { vm.checkUpdate() }) { Text("Vérifier") }
+        }
     }
 }
 
