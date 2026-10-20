@@ -19,6 +19,8 @@ The app UI is in French.
 GitHub Actions (`.github/workflows/build-apk.yml`) builds the APK on every push:
 **Actions** tab → latest successful run → `ecoutify-debug-apk` artifact → `app-debug.apk`, then install it on the phone.
 
+Every build is signed with the same key (`app/ecoutify.jks`, committed on purpose for this personal app) and its version code is the CI run number, so a newer APK installs as an update over the previous one.
+
 Locally: `./gradlew assembleDebug` (JDK 17 + Android SDK 35).
 
 ## Disclaimer

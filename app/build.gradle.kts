@@ -12,16 +12,31 @@ android {
         applicationId = "app.ecoutify"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "0.1.0"
+        // The CI run number grows with every build, so each build can be installed over the previous one.
+        val build = System.getenv("GITHUB_RUN_NUMBER")?.toIntOrNull() ?: 1
+        versionCode = build
+        versionName = "0.1.$build"
+    }
+
+    signingConfigs {
+        // The key is committed on purpose (personal app): every build is signed with the same key,
+        // which is what lets Android install an update over the installed app.
+        // Replace it with a secret key before any public distribution.
+        create("shared") {
+            storeFile = file("ecoutify.jks")
+            storePassword = "android"
+            keyAlias = "ecoutify"
+            keyPassword = "android"
+        }
     }
 
     buildTypes {
+        debug {
+            signingConfig = signingConfigs.getByName("shared")
+        }
         release {
             isMinifyEnabled = false
-            // Signed with the debug key so the APK can be installed directly.
-            // Replace with a real key for public distribution.
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = signingConfigs.getByName("shared")
         }
     }
 
