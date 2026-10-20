@@ -134,6 +134,12 @@ class PlayerConnection(
         current = null
     }
 
+    /** Disconnects from the playback service (playback itself keeps going). */
+    fun release() {
+        controller?.release()
+        controller = null
+    }
+
     fun next() { controller?.seekToNextMediaItem() }
 
     fun previous() {

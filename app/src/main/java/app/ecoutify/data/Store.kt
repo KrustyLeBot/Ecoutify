@@ -163,6 +163,10 @@ class Store(private val context: Context) {
         return p
     }
 
+    fun renamePlaylist(id: String, name: String) = savePlaylists(playlists().map {
+        if (it.id == id) it.copy(name = name.trim()) else it
+    })
+
     fun deletePlaylist(id: String) = savePlaylists(playlists().filter { it.id != id })
 
     fun addToPlaylist(id: String, t: Track) = savePlaylists(playlists().map {
@@ -172,6 +176,11 @@ class Store(private val context: Context) {
     fun removeFromPlaylist(id: String, t: Track) = savePlaylists(playlists().map {
         if (it.id == id) it.copy(tracks = it.tracks.filter { x -> x.url != t.url }) else it
     })
+
+    // --- Home-screen widgets (widget id -> playlist id) ---
+    fun widgetPlaylist(widgetId: Int): String? = prefs.getString("widget_$widgetId", null)
+    fun setWidgetPlaylist(widgetId: Int, playlistId: String) = prefs.edit().putString("widget_$widgetId", playlistId).apply()
+    fun removeWidget(widgetId: Int) = prefs.edit().remove("widget_$widgetId").apply()
 
     // --- Helpers ---
     private fun readList(key: String): List<Track> {

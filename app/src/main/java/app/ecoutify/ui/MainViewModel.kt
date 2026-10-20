@@ -8,12 +8,15 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import app.ecoutify.EcoutifyApp
 import app.ecoutify.data.Playlist
 import app.ecoutify.data.Track
 import app.ecoutify.playback.PlayerConnection
+import app.ecoutify.widget.PlaylistWidgetProvider
+import app.ecoutify.widget.Shortcuts
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
@@ -69,6 +72,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             app.downloads.progress.collect {
                 downloading = it
                 downloaded = app.store.downloads()
+            }
+        }
+        viewModelScope.launch {
+            // keep the widgets and the app-icon shortcuts in step with the playlists
+            snapshotFlow { playlists }.collect {
+                Shortcuts.update(app, it)
+                PlaylistWidgetProvider.updateAll(app)
             }
         }
         viewModelScope.launch {
@@ -174,6 +184,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         if (name.isBlank()) return
         val p = app.store.createPlaylist(name)
         thenAdd?.let { app.store.addToPlaylist(p.id, it) }
+        playlists = app.store.playlists()
+    }
+
+    fun renamePlaylist(p: Playlist, name: String) {
+        if (name.isBlank()) return
+        app.store.renamePlaylist(p.id, name)
         playlists = app.store.playlists()
     }
 

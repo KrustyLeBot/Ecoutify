@@ -299,6 +299,7 @@ private fun LibraryRow(
 
 @Composable
 private fun ListDetail(vm: MainViewModel, title: String, tracks: List<Track>, playlist: Playlist, setOpen: (String?) -> Unit) {
+    var renaming by remember { mutableStateOf(false) }
     Column(Modifier.fillMaxSize()) {
         Row(Modifier.fillMaxWidth().padding(start = 4.dp, top = 12.dp), verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = { setOpen(null) }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Retour") }
@@ -309,6 +310,7 @@ private fun ListDetail(vm: MainViewModel, title: String, tracks: List<Track>, pl
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
+            IconButton(onClick = { renaming = true }) { Icon(Icons.Default.Edit, "Renommer la playlist") }
         }
         Row(Modifier.padding(horizontal = 16.dp, vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Button(onClick = { vm.play(tracks, 0) }, enabled = tracks.isNotEmpty()) {
@@ -323,6 +325,9 @@ private fun ListDetail(vm: MainViewModel, title: String, tracks: List<Track>, pl
         }
         if (tracks.isEmpty()) EmptyHint("Playlist vide. Ajoute des titres depuis le menu ⋮ d'un titre.")
         TrackList(vm, tracks, playlist = playlist)
+    }
+    if (renaming) NameDialog("Renommer la playlist", onDismiss = { renaming = false }, initial = playlist.name, confirmLabel = "Renommer") {
+        vm.renamePlaylist(playlist, it)
     }
 }
 
@@ -448,14 +453,14 @@ private fun PlaylistPicker(vm: MainViewModel, track: Track, onDismiss: () -> Uni
 }
 
 @Composable
-private fun NameDialog(title: String, onDismiss: () -> Unit, onConfirm: (String) -> Unit) {
-    var name by remember { mutableStateOf("") }
+private fun NameDialog(title: String, onDismiss: () -> Unit, initial: String = "", confirmLabel: String = "Créer", onConfirm: (String) -> Unit) {
+    var name by remember { mutableStateOf(initial) }
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(title) },
         text = { OutlinedTextField(name, { name = it }, singleLine = true, placeholder = { Text("Nom") }) },
         confirmButton = {
-            TextButton(onClick = { onConfirm(name); onDismiss() }, enabled = name.isNotBlank()) { Text("Créer") }
+            TextButton(onClick = { onConfirm(name); onDismiss() }, enabled = name.isNotBlank()) { Text(confirmLabel) }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Annuler") } },
     )
