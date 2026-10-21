@@ -5,7 +5,6 @@ import android.content.Context
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Environment
-import androidx.media3.common.Player
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
@@ -77,10 +76,6 @@ class Store(private val context: Context) {
     var shuffle: Boolean
         get() = prefs.getBoolean("shuffle", false)
         set(v) = prefs.edit().putBoolean("shuffle", v).apply()
-
-    var repeat: Int
-        get() = prefs.getInt("repeat", Player.REPEAT_MODE_OFF)
-        set(v) = prefs.edit().putInt("repeat", v).apply()
 
     // --- History ---
     fun history(): List<Track> = readList("history")

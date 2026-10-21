@@ -4,6 +4,7 @@ import android.content.Intent
 import android.net.Uri
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
+import androidx.media3.common.Player
 import androidx.media3.datasource.DataSpec
 import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.datasource.ResolvingDataSource
@@ -38,6 +39,9 @@ class PlaybackService : MediaSessionService() {
             .setHandleAudioBecomingNoisy(true)
             .setWakeMode(C.WAKE_MODE_NETWORK)
             .build()
+        // Always loop the queue: a finished queue (STATE_ENDED) would make a "play" from a car or Bluetooth
+        // replay only the last track.
+        player.repeatMode = Player.REPEAT_MODE_ALL
         session = MediaSession.Builder(this, player).build()
     }
 

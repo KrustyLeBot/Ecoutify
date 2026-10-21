@@ -40,7 +40,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.media3.common.Player
 import app.ecoutify.data.Playlist
 import app.ecoutify.data.Track
 import coil3.compose.AsyncImage
@@ -591,7 +590,7 @@ private fun PlayerScreen(vm: MainViewModel, onClose: () -> Unit) {
             Text(formatTime(dur), style = MaterialTheme.typography.bodySmall, color = dim)
         }
         Spacer(Modifier.height(16.dp))
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly, verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = { player.enableShuffle(!player.shuffle) }) {
                 Icon(Icons.Default.Shuffle, "Aléatoire", tint = if (player.shuffle) accent else dim)
             }
@@ -609,12 +608,6 @@ private fun PlayerScreen(vm: MainViewModel, onClose: () -> Unit) {
             }
             IconButton(onClick = player::next, Modifier.size(56.dp)) {
                 Icon(Icons.Default.SkipNext, "Suivant", Modifier.size(36.dp))
-            }
-            IconButton(onClick = player::cycleRepeat) {
-                Icon(
-                    if (player.repeat == Player.REPEAT_MODE_ONE) Icons.Default.RepeatOne else Icons.Default.Repeat,
-                    "Répéter", tint = if (player.repeat == Player.REPEAT_MODE_OFF) dim else accent,
-                )
             }
         }
         Spacer(Modifier.height(48.dp))

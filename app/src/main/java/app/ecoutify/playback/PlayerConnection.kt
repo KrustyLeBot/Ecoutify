@@ -4,7 +4,6 @@ import android.content.ComponentName
 import android.content.Context
 import android.net.Uri
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.core.content.ContextCompat
@@ -19,7 +18,7 @@ import app.ecoutify.data.Track
 
 /**
  * UI side: drives the playback service and exposes state observable by Compose.
- * The queue is simply the list the track was started from; shuffle and repeat are ExoPlayer's own.
+ * The queue is simply the list the track was started from; shuffle is ExoPlayer's own and the queue always loops.
  */
 class PlayerConnection(
     context: Context,
@@ -32,8 +31,6 @@ class PlayerConnection(
     var isPlaying by mutableStateOf(false)
         private set
     var shuffle by mutableStateOf(app.store.shuffle)
-        private set
-    var repeat by mutableIntStateOf(app.store.repeat)
         private set
 
     private var controller: MediaController? = null
@@ -56,10 +53,6 @@ class PlayerConnection(
 
         override fun onShuffleModeEnabledChanged(enabled: Boolean) {
             shuffle = enabled
-        }
-
-        override fun onRepeatModeChanged(mode: Int) {
-            repeat = mode
         }
 
         override fun onPlayerError(error: PlaybackException) {
@@ -85,11 +78,10 @@ class PlayerConnection(
             c.addListener(listener)
             if (c.mediaItemCount == 0) {
                 c.shuffleModeEnabled = shuffle
-                c.repeatMode = repeat
             } else {
                 shuffle = c.shuffleModeEnabled
-                repeat = c.repeatMode
             }
+            c.repeatMode = Player.REPEAT_MODE_ALL // the queue always loops
             isPlaying = c.isPlaying
             current = c.currentMediaItem?.let(::trackOf)
             pending?.invoke(c)
@@ -152,17 +144,6 @@ class PlayerConnection(
         app.store.shuffle = on
         shuffle = on
         controller?.shuffleModeEnabled = on
-    }
-
-    fun cycleRepeat() {
-        val next = when (repeat) {
-            Player.REPEAT_MODE_OFF -> Player.REPEAT_MODE_ALL
-            Player.REPEAT_MODE_ALL -> Player.REPEAT_MODE_ONE
-            else -> Player.REPEAT_MODE_OFF
-        }
-        app.store.repeat = next
-        repeat = next
-        controller?.repeatMode = next
     }
 
     val positionMs: Long get() = controller?.currentPosition ?: 0L

@@ -11,7 +11,7 @@ The app UI is in French.
 - **Covers**: shown in lists and in the player. They are saved in `Ecoutify/covers/` when a track is added to a playlist or downloaded, so they stay available offline and come back after a reinstall (missing ones are fetched in the background when online).
 - **Playlists**: local, and can contain downloaded or not-yet-downloaded tracks ("Download all" for a whole playlist).
 - **Quick start**: a 1x1 home-screen widget tied to a playlist (picked when the widget is placed) starts it in shuffle mode with one tap, without opening the app. Long-pressing the app icon offers the same for the first four playlists. Playlists can be renamed from their page (pencil icon); widgets and shortcuts follow.
-- **Player**: play/pause, previous/next, seek bar, shuffle, repeat (off / all / one). The queue is simply the list a track was started from; with shuffle on, the next track is picked at random.
+- **Player**: play/pause, previous/next, seek bar, shuffle on/off. The queue is simply the list a track was started from and always loops (there is no repeat setting); with shuffle on, the next track is picked at random.
 - **Recommendations** ("Pour toi" tab): based only on your downloaded tracks and playlists (not on searches or listening history). For some of those tracks the app takes the YouTube Music "radio" (a mix made of songs), keeps only music (song-length tracks, no talks, mixes or long videos) and puts official audio first. The last suggestions stay visible offline.
 
 ## Getting the APK
