@@ -18,7 +18,7 @@ import app.ecoutify.data.Track
 
 /**
  * UI side: drives the playback service and exposes state observable by Compose.
- * The queue is simply the list the track was started from; shuffle is ExoPlayer's own and the queue always loops.
+ * The queue is simply the list the track was started from; the queue always loops and is always shuffled (ExoPlayer's own shuffle mode).
  */
 class PlayerConnection(
     context: Context,
@@ -29,8 +29,6 @@ class PlayerConnection(
     var current by mutableStateOf<Track?>(null)
         private set
     var isPlaying by mutableStateOf(false)
-        private set
-    var shuffle by mutableStateOf(app.store.shuffle)
         private set
 
     private var controller: MediaController? = null
@@ -49,10 +47,6 @@ class PlayerConnection(
         override fun onMediaItemTransition(item: MediaItem?, reason: Int) {
             current = item?.let(::trackOf)
             current?.let { app.store.addToHistory(it) }
-        }
-
-        override fun onShuffleModeEnabledChanged(enabled: Boolean) {
-            shuffle = enabled
         }
 
         override fun onPlayerError(error: PlaybackException) {
@@ -76,12 +70,9 @@ class PlayerConnection(
             val c = future.get()
             controller = c
             c.addListener(listener)
-            if (c.mediaItemCount == 0) {
-                c.shuffleModeEnabled = shuffle
-            } else {
-                shuffle = c.shuffleModeEnabled
-            }
-            c.repeatMode = Player.REPEAT_MODE_ALL // the queue always loops
+            // the queue always loops and is always shuffled (also enforced by the service)
+            c.repeatMode = Player.REPEAT_MODE_ALL
+            c.shuffleModeEnabled = true
             isPlaying = c.isPlaying
             current = c.currentMediaItem?.let(::trackOf)
             pending?.invoke(c)
@@ -108,7 +99,6 @@ class PlayerConnection(
 
     fun playShuffled(queue: List<Track>) {
         if (queue.isEmpty()) return
-        enableShuffle(true)
         play(queue, queue.indices.random())
     }
 
@@ -139,12 +129,6 @@ class PlayerConnection(
     }
 
     fun seekTo(ms: Long) { controller?.seekTo(ms) }
-
-    fun enableShuffle(on: Boolean) {
-        app.store.shuffle = on
-        shuffle = on
-        controller?.shuffleModeEnabled = on
-    }
 
     val positionMs: Long get() = controller?.currentPosition ?: 0L
     val durationMs: Long get() = controller?.duration?.takeIf { it > 0 } ?: 0L

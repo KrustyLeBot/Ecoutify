@@ -72,11 +72,6 @@ class Store(private val context: Context) {
         }
     }
 
-    // --- Playback settings ---
-    var shuffle: Boolean
-        get() = prefs.getBoolean("shuffle", false)
-        set(v) = prefs.edit().putBoolean("shuffle", v).apply()
-
     // --- History ---
     fun history(): List<Track> = readList("history")
 

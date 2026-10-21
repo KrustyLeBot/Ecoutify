@@ -40,8 +40,9 @@ class PlaybackService : MediaSessionService() {
             .setWakeMode(C.WAKE_MODE_NETWORK)
             .build()
         // Always loop the queue: a finished queue (STATE_ENDED) would make a "play" from a car or Bluetooth
-        // replay only the last track.
+        // replay only the last track. And always shuffle: there is no sequential mode.
         player.repeatMode = Player.REPEAT_MODE_ALL
+        player.shuffleModeEnabled = true
         session = MediaSession.Builder(this, player).build()
     }
 

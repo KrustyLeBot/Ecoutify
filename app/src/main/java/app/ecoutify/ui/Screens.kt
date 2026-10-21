@@ -354,11 +354,9 @@ private fun ListDetail(vm: MainViewModel, title: String, tracks: List<Track>, pl
             IconButton(onClick = { renaming = true }) { Icon(Icons.Default.Edit, "Renommer la playlist") }
         }
         Row(Modifier.padding(horizontal = 16.dp, vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Button(onClick = { vm.play(tracks, 0) }, enabled = tracks.isNotEmpty()) {
+            // Playback is always shuffled: start from a random track of the playlist.
+            Button(onClick = { vm.playShuffled(tracks) }, enabled = tracks.isNotEmpty()) {
                 Icon(Icons.Default.PlayArrow, null); Spacer(Modifier.width(4.dp)); Text("Lecture")
-            }
-            FilledTonalButton(onClick = { vm.playShuffled(tracks) }, enabled = tracks.isNotEmpty()) {
-                Icon(Icons.Default.Shuffle, null); Spacer(Modifier.width(4.dp)); Text("Aléatoire")
             }
             IconButton(onClick = { vm.downloadAll(tracks) }, enabled = tracks.any { !vm.isDownloaded(it) }) {
                 Icon(Icons.Default.Download, "Tout télécharger")
@@ -591,9 +589,6 @@ private fun PlayerScreen(vm: MainViewModel, onClose: () -> Unit) {
         }
         Spacer(Modifier.height(16.dp))
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly, verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = { player.enableShuffle(!player.shuffle) }) {
-                Icon(Icons.Default.Shuffle, "Aléatoire", tint = if (player.shuffle) accent else dim)
-            }
             IconButton(onClick = player::previous, Modifier.size(56.dp)) {
                 Icon(Icons.Default.SkipPrevious, "Précédent", Modifier.size(36.dp))
             }
