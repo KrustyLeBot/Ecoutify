@@ -11,6 +11,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import androidx.work.WorkInfo
+import androidx.work.WorkManager
+import app.ecoutify.data.Downloads
 import app.ecoutify.EcoutifyApp
 import app.ecoutify.data.Playlist
 import app.ecoutify.data.Updater
@@ -54,6 +57,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     /** A downloaded update waiting to be handed to the system installer (consumed by the UI). */
     var pendingInstall by mutableStateOf<File?>(null)
     private var coverJob: Job? = null
+    private var runningDownloads = emptyMap<String, Int>()
+    private var queuedDownloads = emptySet<String>()
+
+    /** Import of a YouTube playlist: null = dialog closed, otherwise the text prefilled in it. */
+    var importDialog by mutableStateOf<String?>(null)
+    var importing by mutableStateOf(false)
+        private set
     var results by mutableStateOf<List<Track>>(emptyList())
         private set
     var searching by mutableStateOf(false)
@@ -71,6 +81,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     init {
         refreshStorage()
+        app.downloads.scheduleSync()
         connectivity.registerDefaultNetworkCallback(object : ConnectivityManager.NetworkCallback() {
             override fun onAvailable(network: Network) {
                 online = true
@@ -84,7 +95,17 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         refreshRecommendations()
         viewModelScope.launch {
             app.downloads.progress.collect {
-                downloading = it
+                runningDownloads = it
+                downloading = queuedDownloads.associateWith { 0 } + it
+                downloaded = app.store.downloads()
+            }
+        }
+        viewModelScope.launch {
+            // downloads waiting in the background queue (still there after the app was closed and reopened)
+            WorkManager.getInstance(app).getWorkInfosForUniqueWorkFlow(Downloads.QUEUE).collect { infos ->
+                queuedDownloads = infos.filter { it.state == WorkInfo.State.ENQUEUED || it.state == WorkInfo.State.RUNNING || it.state == WorkInfo.State.BLOCKED }
+                    .flatMap { it.tags }.filter { it.startsWith(Downloads.TAG_PREFIX) }.map { it.removePrefix(Downloads.TAG_PREFIX) }.toSet()
+                downloading = queuedDownloads.associateWith { 0 } + runningDownloads
                 downloaded = app.store.downloads()
             }
         }
@@ -155,6 +176,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     /** Searches for text shared from another app (links and the " - " separator are dropped). */
     fun searchShared(raw: String) {
+        val link = Regex("https?://\\S+").find(raw)?.value
+        if (link != null && link.contains("/playlist?") && link.contains("list=")) {
+            importDialog = link // a shared playlist link: offer to import it
+            shareRequest++
+            return
+        }
         val cleaned = raw.replace(Regex("https?://\\S+"), " ").replace(" - ", " ").replace(Regex("\\s+"), " ").trim()
         if (cleaned.isEmpty()) return
         query = cleaned
@@ -201,6 +228,39 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         playlists = app.store.playlists()
     }
 
+    /** "Keep offline": download every track of the playlist automatically (on Wi-Fi), now and as it grows. */
+    fun setKeepOffline(p: Playlist, on: Boolean) {
+        app.store.setKeepOffline(p.id, on)
+        playlists = app.store.playlists()
+        if (on) {
+            app.downloads.scheduleSync()
+            message = "Les titres seront téléchargés automatiquement en Wi-Fi"
+        }
+    }
+
+    /** Creates a playlist from a YouTube / YouTube Music playlist link. */
+    fun importPlaylist(link: String) {
+        if (importing) return
+        importing = true
+        viewModelScope.launch {
+            try {
+                val (name, tracks) = withContext(Dispatchers.IO) { app.catalog.playlist(link.trim()) }
+                if (tracks.isEmpty()) {
+                    message = "Aucun titre trouvé dans cette playlist"
+                } else {
+                    app.store.createPlaylistWith(name, tracks)
+                    playlists = app.store.playlists()
+                    message = "Playlist « $name » importée (${tracks.size} titres)"
+                    ensureCovers()
+                }
+            } catch (e: Exception) {
+                message = "Import impossible : ${e.message}"
+            } finally {
+                importing = false
+            }
+        }
+    }
+
     fun renamePlaylist(p: Playlist, name: String) {
         if (name.isBlank()) return
         app.store.renamePlaylist(p.id, name)
@@ -216,6 +276,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun addToPlaylist(p: Playlist, t: Track) {
         app.store.addToPlaylist(p.id, t)
         playlists = app.store.playlists()
+        if (p.keepOffline) app.downloads.scheduleSync()
         message = "Ajouté à « ${p.name} »"
         viewModelScope.launch(Dispatchers.IO) { runCatching { app.covers.save(t) } }
     }

@@ -78,6 +78,26 @@ class Catalog(downloader: OkHttpDownloader) {
             ?: images.lastOrNull())?.url
     }
 
+    /**
+     * Reads a YouTube / YouTube Music playlist link: its name and its tracks (at most [MAX_IMPORT]).
+     * Entries without a duration (deleted / private videos) are skipped.
+     */
+    fun playlist(link: String): Pair<String, List<Track>> {
+        val id = Regex("[?&]list=([A-Za-z0-9_-]+)").find(link)?.groupValues?.get(1) ?: error("Lien de playlist invalide")
+        val url = "https://www.youtube.com/playlist?list=$id"
+        val info = PlaylistInfo.getInfo(youtube, url)
+        val tracks = mutableListOf<Track>()
+        fun add(items: List<StreamInfoItem>) = items.filter { it.duration > 0 }.forEach { tracks += toTrack(it) }
+        add(info.relatedItems)
+        var page = info.nextPage
+        while (page != null && tracks.size < MAX_IMPORT) {
+            val next = PlaylistInfo.getMoreItems(youtube, url, page)
+            add(next.items)
+            page = if (next.hasNextPage()) next.nextPage else null
+        }
+        return info.name to tracks.distinctBy { it.url }.take(MAX_IMPORT)
+    }
+
     /** Direct URL of the best audio stream (M4A preferred), cached ~2 h (URLs expire). */
     fun audioUrl(watchUrl: String): String = audioStream(watchUrl).first
 
@@ -106,5 +126,9 @@ class Catalog(downloader: OkHttpDownloader) {
     private fun cleanTitle(raw: String): String {
         val noise = Regex("\\s*[\\(\\[][^\\)\\]]*(official|video|audio|lyrics?|clip|visuali[sz]er|4k|hd)[^\\)\\]]*[\\)\\]]", RegexOption.IGNORE_CASE)
         return raw.replace(noise, "").trim().ifEmpty { raw }
+    }
+
+    private companion object {
+        const val MAX_IMPORT = 300
     }
 }

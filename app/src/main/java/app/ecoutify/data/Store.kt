@@ -79,6 +79,10 @@ class Store(private val context: Context) {
         writeList("history", (listOf(t) + history().filter { it.url != t.url }).take(60))
     }
 
+    // --- Last queue (restarted when a car / Bluetooth device asks to play and nothing is loaded) ---
+    fun lastQueue(): List<Track> = readList("last_queue")
+    fun saveLastQueue(list: List<Track>) = writeList("last_queue", list.take(300))
+
     // --- Recommendations (kept for offline mode) ---
     fun cachedRecommendations(): List<Track> = readList("recs")
     fun saveRecommendations(list: List<Track>) = writeList("recs", list)
@@ -130,6 +134,7 @@ class Store(private val context: Context) {
                 o.getString("id"),
                 o.getString("name"),
                 (0 until tracks.length()).map { i -> Track.fromJson(tracks.getJSONObject(i)) },
+                o.optBoolean("keepOffline", false),
             )
         }
     }
@@ -138,7 +143,7 @@ class Store(private val context: Context) {
         val arr = JSONArray()
         list.forEach { p ->
             arr.put(
-                JSONObject().put("id", p.id).put("name", p.name)
+                JSONObject().put("id", p.id).put("name", p.name).put("keepOffline", p.keepOffline)
                     .put("tracks", JSONArray().also { a -> p.tracks.forEach { a.put(it.toJson()) } })
             )
         }
@@ -152,6 +157,17 @@ class Store(private val context: Context) {
         savePlaylists(playlists() + p)
         return p
     }
+
+    /** Creates a playlist that already holds [tracks] (used by the playlist import). */
+    fun createPlaylistWith(name: String, tracks: List<Track>): Playlist {
+        val p = Playlist(UUID.randomUUID().toString(), name.trim(), tracks.distinctBy { it.url })
+        savePlaylists(playlists() + p)
+        return p
+    }
+
+    fun setKeepOffline(id: String, on: Boolean) = savePlaylists(playlists().map {
+        if (it.id == id) it.copy(keepOffline = on) else it
+    })
 
     fun renamePlaylist(id: String, name: String) = savePlaylists(playlists().map {
         if (it.id == id) it.copy(name = name.trim()) else it

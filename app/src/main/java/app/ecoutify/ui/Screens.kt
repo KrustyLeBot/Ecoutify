@@ -7,6 +7,7 @@ import android.net.Uri
 import android.os.Build
 import android.provider.Settings
 import androidx.activity.compose.BackHandler
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -82,7 +83,7 @@ fun EcoutifyScreen(vm: MainViewModel) {
     }
     LaunchedEffect(vm.shareRequest) {
         if (vm.shareRequest > 0) {
-            tab = Tab.Search
+            tab = if (vm.importDialog != null) Tab.Library else Tab.Search
             showPlayer = false
         }
     }
@@ -125,6 +126,9 @@ fun EcoutifyScreen(vm: MainViewModel) {
                     Tab.Library -> LibraryScreen(vm, openList) { openList = it }
                 }
             }
+        }
+        vm.importDialog?.let { initial ->
+            ImportDialog(vm, initial) { vm.importDialog = null }
         }
         if (showPlayer) PlayerScreen(vm, onClose = { showPlayer = false })
     }
@@ -257,7 +261,12 @@ private fun LibraryHome(vm: MainViewModel, setOpen: (String?) -> Unit) {
     var toDelete by remember { mutableStateOf<Playlist?>(null) }
     Column(Modifier.fillMaxSize()) {
         ScreenTitle("Bibliothèque") {
+            IconButton(onClick = { vm.importDialog = "" }) { Icon(Icons.Default.Link, "Importer une playlist YouTube") }
             IconButton(onClick = { creating = true }) { Icon(Icons.Default.Add, "Nouvelle playlist") }
+        }
+        if (vm.importing) {
+            LinearProgressIndicator(Modifier.fillMaxWidth())
+            EmptyHint("Import de la playlist en cours…")
         }
         LazyColumn(Modifier.fillMaxSize()) {
             items(vm.playlists, key = { it.id }) { p ->
@@ -361,6 +370,19 @@ private fun ListDetail(vm: MainViewModel, title: String, tracks: List<Track>, pl
             IconButton(onClick = { vm.downloadAll(tracks) }, enabled = tracks.any { !vm.isDownloaded(it) }) {
                 Icon(Icons.Default.Download, "Tout télécharger")
             }
+        }
+        Row(
+            Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(Modifier.weight(1f)) {
+                Text("Garder hors ligne", style = MaterialTheme.typography.bodyLarge)
+                Text(
+                    "Télécharge tous les titres automatiquement, en Wi-Fi",
+                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            Switch(checked = playlist.keepOffline, onCheckedChange = { vm.setKeepOffline(playlist, it) })
         }
         if (tracks.isEmpty()) EmptyHint("Playlist vide. Ajoute des titres depuis le menu ⋮ d'un titre.")
         TrackList(vm, tracks, playlist = playlist)
@@ -487,6 +509,31 @@ private fun PlaylistPicker(vm: MainViewModel, track: Track, onDismiss: () -> Uni
             }
         },
         confirmButton = {},
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Annuler") } },
+    )
+}
+
+@Composable
+private fun ImportDialog(vm: MainViewModel, initial: String, onDismiss: () -> Unit) {
+    val clipboard = LocalClipboardManager.current
+    var link by remember {
+        mutableStateOf(initial.ifEmpty { clipboard.getText()?.text?.takeIf { "list=" in it && "youtu" in it }.orEmpty() })
+    }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Importer une playlist") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(
+                    "Colle le lien d'une playlist YouTube ou YouTube Music (publique ou non répertoriée). Elle devient une playlist d'Ecoutify.",
+                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                OutlinedTextField(link, { link = it }, singleLine = true, placeholder = { Text("https://…/playlist?list=…") })
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = { vm.importPlaylist(link); onDismiss() }, enabled = "list=" in link && !vm.importing) { Text("Importer") }
+        },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Annuler") } },
     )
 }

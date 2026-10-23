@@ -2,13 +2,11 @@ package app.ecoutify.playback
 
 import android.content.ComponentName
 import android.content.Context
-import android.net.Uri
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.core.content.ContextCompat
 import androidx.media3.common.MediaItem
-import androidx.media3.common.MediaMetadata
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.session.MediaController
@@ -89,8 +87,9 @@ class PlayerConnection(
             onMessage("Hors ligne : ce titre n'est pas téléchargé")
             return
         }
+        app.store.saveLastQueue(queue) // lets a car or Bluetooth play button restart it later
         val action = { c: MediaController ->
-            c.setMediaItems(playable.map(::mediaItem), start, 0L)
+            c.setMediaItems(playable.map { QueueItems.mediaItem(app, it) }, start, 0L)
             c.prepare()
             c.play()
         }
@@ -140,18 +139,4 @@ class PlayerConnection(
         durationSec = 0,
         thumbnail = item.mediaMetadata.artworkUri?.toString()?.takeIf { it.startsWith("http") },
     )
-
-    private fun mediaItem(t: Track) = MediaItem.Builder()
-        .setMediaId(t.url)
-        .setUri(t.url)
-        .setMediaMetadata(
-            MediaMetadata.Builder().setTitle(t.title).setArtist(t.artist)
-                .setArtworkUri(artworkOf(t))
-                .build()
-        )
-        .build()
-
-    /** Cover for the notification / lock screen: the saved file if any, else the online image. */
-    private fun artworkOf(t: Track): Uri? =
-        app.store.coverFile(t.url)?.takeIf { it.exists() }?.let(Uri::fromFile) ?: t.thumbnail?.let(Uri::parse)
 }

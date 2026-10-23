@@ -14,7 +14,10 @@ import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaSessionService
 import app.ecoutify.EcoutifyApp
+import app.ecoutify.data.Connectivity
 import app.ecoutify.data.OkHttpDownloader
+import com.google.common.util.concurrent.Futures
+import com.google.common.util.concurrent.ListenableFuture
 import java.io.IOException
 
 /**
@@ -43,7 +46,22 @@ class PlaybackService : MediaSessionService() {
         // replay only the last track. And always shuffle: there is no sequential mode.
         player.repeatMode = Player.REPEAT_MODE_ALL
         player.shuffleModeEnabled = true
-        session = MediaSession.Builder(this, player).build()
+        session = MediaSession.Builder(this, player).setCallback(object : MediaSession.Callback {
+            /**
+             * A car / Bluetooth / headset "play" while nothing is loaded (e.g. the app was closed):
+             * restart the last queue, from a random track (playback is always shuffled).
+             */
+            override fun onPlaybackResumption(
+                mediaSession: MediaSession,
+                controller: MediaSession.ControllerInfo,
+            ): ListenableFuture<MediaSession.MediaItemsWithStartPosition> {
+                val last = app.store.lastQueue()
+                val tracks = if (Connectivity.isOnline(app)) last else last.filter { app.store.downloadedFile(it.url) != null }
+                if (tracks.isEmpty()) return Futures.immediateFailedFuture(UnsupportedOperationException("Nothing to resume"))
+                val items = tracks.map { QueueItems.mediaItem(app, it) }
+                return Futures.immediateFuture(MediaSession.MediaItemsWithStartPosition(items, items.indices.random(), C.TIME_UNSET))
+            }
+        }).build()
     }
 
     private fun resolve(app: EcoutifyApp, spec: DataSpec): DataSpec {
