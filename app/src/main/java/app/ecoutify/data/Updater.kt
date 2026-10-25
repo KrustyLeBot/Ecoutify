@@ -53,6 +53,7 @@ class Updater(private val context: Context, private val client: OkHttpClient) {
         dir.listFiles()?.forEach { it.delete() }
         val target = File(dir, "update-${release.build}.apk")
         val part = File(dir, "update-${release.build}.apk.part")
+        val sha = MessageDigest.getInstance("SHA-256")
         val request = Request.Builder().url(release.url).header("User-Agent", OkHttpDownloader.USER_AGENT).build()
         client.newCall(request).execute().use { r ->
             check(r.isSuccessful) { "HTTP ${r.code}" }
@@ -60,7 +61,6 @@ class Updater(private val context: Context, private val client: OkHttpClient) {
             val total = (body.contentLength().takeIf { it > 0 } ?: release.sizeBytes).coerceAtLeast(1)
             var done = 0L
             var last = -1
-            val sha = MessageDigest.getInstance("SHA-256")
             body.byteStream().use { input ->
                 part.outputStream().use { output ->
                     val buffer = ByteArray(64 * 1024)
@@ -83,7 +83,8 @@ class Updater(private val context: Context, private val client: OkHttpClient) {
             part.delete()
             error("Téléchargement incomplet")
         }
-        if (release.sha256.isNotEmpty() && sha.digest().joinToString("") { "%02x".format(it) } != release.sha256) {
+        val hex = sha.digest().joinToString("") { byte -> "%02x".format(byte) }
+        if (release.sha256.isNotEmpty() && hex != release.sha256) {
             part.delete()
             error("Le fichier téléchargé ne correspond pas à l'empreinte SHA-256 publiée")
         }
