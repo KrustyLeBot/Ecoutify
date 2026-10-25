@@ -1,4 +1,5 @@
 import hashlib
+import os
 import threading
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
@@ -57,3 +58,25 @@ def test_install_puts_the_old_version_back_if_it_fails(tmp_path):
     with pytest.raises(OSError):
         updater.install(str(exe), str(tmp_path / "missing"))
     assert exe.read_bytes() == b"old"
+
+
+def test_install_never_renames_across_folders(tmp_path, monkeypatch):
+    # The download sits in the temp folder, which can be on another drive than the exe: Windows refuses
+    # such a rename (WinError 17). Simulate it by refusing any rename that leaves its folder.
+    exe_dir, temp_dir = tmp_path / "D-drive", tmp_path / "C-temp"
+    exe_dir.mkdir()
+    temp_dir.mkdir()
+    exe, new = exe_dir / "Ecoutify.exe", temp_dir / "Ecoutify-9.exe.download"
+    exe.write_bytes(b"old")
+    new.write_bytes(b"new")
+    real_replace = os.replace
+
+    def same_drive_only(src, dst):
+        if os.path.dirname(os.fspath(src)) != os.path.dirname(os.fspath(dst)):
+            raise OSError(17, "Cannot move the file to a different disk drive")
+        real_replace(src, dst)
+
+    monkeypatch.setattr(updater.os, "replace", same_drive_only)
+    updater.install(str(exe), str(new))
+    assert exe.read_bytes() == b"new"
+    assert not (exe_dir / "Ecoutify.exe.new").exists()
