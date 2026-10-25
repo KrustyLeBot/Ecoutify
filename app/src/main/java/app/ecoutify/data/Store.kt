@@ -32,6 +32,9 @@ class Store(private val context: Context) {
     private val publicRoot: File
         get() = File(Environment.getExternalStorageDirectory(), "Ecoutify")
 
+    /** Folder that Synchrotron syncs with Proton Drive (only meaningful with [hasStorageAccess]). */
+    val syncPath: String get() = publicRoot.path
+
     /** Is access to the public `Ecoutify/` folder granted? */
     fun hasStorageAccess(): Boolean =
         if (Build.VERSION.SDK_INT >= 30) Environment.isExternalStorageManager()
@@ -71,6 +74,11 @@ class Store(private val context: Context) {
             privatePlaylists.delete()
         }
     }
+
+    /** The user said "later" to the Synchrotron suggestion. */
+    var syncHintDismissed: Boolean
+        get() = prefs.getBoolean("sync_hint_dismissed", false)
+        set(v) = prefs.edit().putBoolean("sync_hint_dismissed", v).apply()
 
     // --- History ---
     fun history(): List<Track> = readList("history")

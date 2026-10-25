@@ -17,6 +17,11 @@
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="29" />
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="29" />
 
+    <!-- Lets the app see whether Synchrotron (Proton Drive sync) is installed. -->
+    <queries>
+        <package android:name="app.synchrotron" />
+    </queries>
+
     <application
         android:name=".EcoutifyApp"
         android:allowBackup="true"

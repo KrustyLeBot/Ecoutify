@@ -16,6 +16,9 @@ import androidx.work.WorkManager
 import app.ecoutify.data.Downloads
 import app.ecoutify.EcoutifyApp
 import app.ecoutify.data.Playlist
+import app.ecoutify.sync.SkipReason
+import app.ecoutify.sync.SyncState
+import app.ecoutify.sync.SynchrotronClient
 import app.ecoutify.data.Updater
 import app.ecoutify.data.Track
 import app.ecoutify.playback.PlayerConnection
@@ -128,14 +131,80 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun refreshStorage() {
         storageOk = app.store.hasStorageAccess()
         viewModelScope.launch {
-            withContext(Dispatchers.IO) {
-                app.store.migratePrivateToPublic()
-                adoptOrphanDownloads()
-            }
-            downloaded = app.store.downloads()
-            playlists = app.store.playlists()
-            ensureCovers()
+            withContext(Dispatchers.IO) { app.store.migratePrivateToPublic() }
+            reloadFromDisk()
         }
+    }
+
+    private suspend fun reloadFromDisk(adopt: Boolean = false) {
+        withContext(Dispatchers.IO) { if (adopt) adoptOrphanDownloads() }
+        downloaded = app.store.downloads()
+        playlists = app.store.playlists()
+        ensureCovers()
+    }
+
+    // --- Proton Drive sync through Synchrotron ---
+
+    /** A sync is running: playlists and downloads are read-only (playback still works) until it ends. */
+    var syncing by mutableStateOf(false)
+        private set
+    /** Synchrotron is installed but does not sync the Ecoutify folder yet: offer to set it up. */
+    var offerSyncSetup by mutableStateOf(false)
+        private set
+    private var stopSync: (() -> Unit)? = null
+
+    /** Asks Synchrotron for a sync so the library is up to date when the app opens. */
+    fun syncOnOpen() {
+        if (syncing || !app.store.hasStorageAccess()) return
+        stopSync?.invoke()
+        stopSync = SynchrotronClient.syncOnOpen(app, app.store.syncPath) { state ->
+            when (state) {
+                SyncState.Syncing -> syncing = true
+                is SyncState.Done -> {
+                    syncing = false
+                    viewModelScope.launch {
+                        // Orphan adoption waits for the sync: a track synced before playlists.json is not an orphan.
+                        reloadFromDisk(adopt = true)
+                        if (state.changes > 0) message = "Bibliothèque synchronisée (${state.changes} changement${if (state.changes > 1) "s" else ""})"
+                    }
+                }
+                is SyncState.Failed -> { syncing = false; message = "Échec de la synchro Proton Drive"; adoptLater() }
+                SyncState.TimedOut -> { syncing = false; message = "Synchro longue : elle continue en arrière-plan" }
+                is SyncState.Skipped -> {
+                    syncing = false
+                    offerSyncSetup = state.reason == SkipReason.NOT_REGISTERED && !app.store.syncHintDismissed
+                    if (state.reason == SkipReason.NEEDS_SETUP) message = "Termine la configuration dans Synchrotron"
+                    adoptLater()
+                }
+            }
+        }
+    }
+
+    private fun adoptLater() {
+        viewModelScope.launch { reloadFromDisk(adopt = true) }
+    }
+
+    fun setUpSync() {
+        offerSyncSetup = false
+        SynchrotronClient.registerFolder(
+            app, app.store.syncPath, "Ecoutify",
+            remotePath = "Apps/Ecoutify", conflictPolicy = "NEWER", intervalMinutes = 180, watchChanges = true,
+            exclusions = listOf("*.part", "*.tmp"), // unfinished downloads and atomic-write temporaries
+        )
+    }
+
+    fun dismissSyncSetup() {
+        offerSyncSetup = false
+        app.store.syncHintDismissed = true
+    }
+
+    override fun onCleared() {
+        stopSync?.invoke()
+    }
+
+    private fun blockedBySync(): Boolean {
+        if (syncing) message = "Synchronisation en cours…"
+        return syncing
     }
 
     /** Image to show for [t]: the saved cover file when there is one, else its online image. */
@@ -208,12 +277,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     // --- Downloads ---
     fun download(t: Track) {
+        if (blockedBySync()) return
         if (!online) message = "Hors ligne : téléchargement impossible" else app.downloads.start(t)
     }
 
     fun downloadAll(list: List<Track>) = list.forEach(::download)
 
     fun deleteDownload(t: Track) {
+        if (blockedBySync()) return
         app.store.removeDownload(t)
         downloaded = app.store.downloads()
     }
@@ -222,7 +293,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     // --- Playlists ---
     fun createPlaylist(name: String, thenAdd: Track? = null) {
-        if (name.isBlank()) return
+        if (name.isBlank() || blockedBySync()) return
         val p = app.store.createPlaylist(name)
         thenAdd?.let { app.store.addToPlaylist(p.id, it) }
         playlists = app.store.playlists()
@@ -230,6 +301,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     /** "Keep offline": download every track of the playlist automatically (on Wi-Fi), now and as it grows. */
     fun setKeepOffline(p: Playlist, on: Boolean) {
+        if (blockedBySync()) return
         app.store.setKeepOffline(p.id, on)
         playlists = app.store.playlists()
         if (on) {
@@ -240,7 +312,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     /** Creates a playlist from a YouTube / YouTube Music playlist link. */
     fun importPlaylist(link: String) {
-        if (importing) return
+        if (importing || blockedBySync()) return
         importing = true
         viewModelScope.launch {
             try {
@@ -262,18 +334,20 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun renamePlaylist(p: Playlist, name: String) {
-        if (name.isBlank()) return
+        if (name.isBlank() || blockedBySync()) return
         app.store.renamePlaylist(p.id, name)
         playlists = app.store.playlists()
     }
 
     fun deletePlaylist(p: Playlist) {
+        if (blockedBySync()) return
         app.store.deletePlaylist(p.id)
         playlists = app.store.playlists()
         p.tracks.forEach(::deleteIfInNoPlaylist)
     }
 
     fun addToPlaylist(p: Playlist, t: Track) {
+        if (blockedBySync()) return
         app.store.addToPlaylist(p.id, t)
         playlists = app.store.playlists()
         if (p.keepOffline) app.downloads.scheduleSync()
@@ -282,6 +356,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun removeFromPlaylist(p: Playlist, t: Track) {
+        if (blockedBySync()) return
         app.store.removeFromPlaylist(p.id, t)
         playlists = app.store.playlists()
         deleteIfInNoPlaylist(t)
