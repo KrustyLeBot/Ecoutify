@@ -9,6 +9,7 @@ import app.ecoutify.data.OkHttpDownloader
 import app.ecoutify.data.Recommender
 import app.ecoutify.data.Store
 import app.ecoutify.data.Updater
+import app.ecoutify.recognize.SongRecognizer
 import okhttp3.OkHttpClient
 
 class EcoutifyApp : Application() {
@@ -26,4 +27,5 @@ class EcoutifyApp : Application() {
     val downloads by lazy { Downloads(this, catalog, store, http, covers) }
     val updater by lazy { Updater(this, http) }
     val recommender by lazy { Recommender(catalog, store) }
+    val recognizer by lazy { SongRecognizer(http) }
 }

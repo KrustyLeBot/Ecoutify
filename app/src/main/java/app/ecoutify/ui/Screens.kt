@@ -7,6 +7,8 @@ import android.net.Uri
 import android.os.Build
 import android.provider.Settings
 import androidx.activity.compose.BackHandler
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.foundation.background
@@ -251,8 +253,16 @@ private fun HomeScreen(vm: MainViewModel) {
 
 @Composable
 private fun SearchScreen(vm: MainViewModel) {
+    val askMic = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        if (granted) vm.recognize()
+    }
     Column(Modifier.fillMaxSize()) {
-        ScreenTitle("Recherche")
+        ScreenTitle("Recherche") {
+            IconButton(onClick = { askMic.launch(android.Manifest.permission.RECORD_AUDIO) }) {
+                if (vm.listening != null) Icon(Icons.Default.Stop, "Arrêter l'écoute")
+                else Icon(Icons.Default.Mic, "Quel est ce morceau ?")
+            }
+        }
         OutlinedTextField(
             value = vm.query,
             onValueChange = { vm.query = it },
@@ -270,6 +280,17 @@ private fun SearchScreen(vm: MainViewModel) {
             keyboardActions = KeyboardActions(onSearch = { vm.search() }),
         )
         Spacer(Modifier.height(8.dp))
+        when (vm.listening) {
+            MainViewModel.Listening.RECORDING -> {
+                LinearProgressIndicator(Modifier.fillMaxWidth())
+                EmptyHint("Écoute en cours… approche le téléphone de la musique.")
+            }
+            MainViewModel.Listening.IDENTIFYING -> {
+                LinearProgressIndicator(Modifier.fillMaxWidth())
+                EmptyHint("Identification…")
+            }
+            null -> Unit
+        }
         if (vm.searching) LinearProgressIndicator(Modifier.fillMaxWidth())
         if (!vm.online) EmptyHint("La recherche nécessite une connexion.")
         TrackList(vm, vm.results)

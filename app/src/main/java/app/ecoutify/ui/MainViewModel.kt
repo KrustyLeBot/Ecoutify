@@ -30,6 +30,10 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
 import android.content.Intent
+import kotlinx.coroutines.CancellationException
+import androidx.core.content.ContextCompat
+import android.content.pm.PackageManager
+import android.Manifest
 
 class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val app = application as EcoutifyApp
@@ -268,6 +272,47 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 app.store.saveRecommendations(fresh)
             }
             loadingRecs = false
+        }
+    }
+
+    // --- "What is playing?" ---
+    enum class Listening { RECORDING, IDENTIFYING }
+
+    /** Song recognition in progress (null when idle). */
+    var listening by mutableStateOf<Listening?>(null)
+        private set
+    private var listenJob: Job? = null
+
+    /** Listens to the music around, then searches YouTube for the song Shazam found. */
+    fun recognize() {
+        if (listening != null) {
+            listenJob?.cancel()
+            listening = null
+            return
+        }
+        if (!online) {
+            message = "La reconnaissance nécessite une connexion"
+            return
+        }
+        if (ContextCompat.checkSelfPermission(app, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) return
+        listening = Listening.RECORDING
+        listenJob = viewModelScope.launch {
+            try {
+                val match = app.recognizer.listen { listening = Listening.IDENTIFYING }
+                if (match == null) {
+                    message = "Morceau non reconnu"
+                } else {
+                    query = listOf(match.title, match.artist).filter { it.isNotEmpty() }.joinToString(" ")
+                    message = "Trouvé : ${match.title}" + if (match.artist.isNotEmpty()) " — ${match.artist}" else ""
+                    search()
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                message = "Reconnaissance impossible : ${e.message}"
+            } finally {
+                listening = null
+            }
         }
     }
 
