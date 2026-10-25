@@ -34,7 +34,7 @@ GitHub Actions (`.github/workflows/build-apk.yml`) builds the APK and the Window
 
 Every build is signed with the same key (`app/ecoutify.jks`, committed on purpose for this personal app) and its version code is the CI run number, so a newer APK installs as an update over the previous one.
 
-Locally: `./gradlew assembleDebug` (JDK 17 + Android SDK 35).
+Locally: `./gradlew assembleRelease` (JDK 17 + Android SDK 35).
 
 ## Disclaimer
 
