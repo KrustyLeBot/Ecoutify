@@ -1,10 +1,18 @@
-"""Self-update from the 'latest' GitHub release (published by the CI with the APK and the EXE)."""
+"""
+Self-update from the 'latest' GitHub release (published by the CI with the APK and the EXE).
+
+Modelled on GitEnough's updater: the download is checked (size and SHA-256 published by GitHub) before it may
+replace a working executable; the running .exe is renamed to .old (Windows allows renaming a running file, not
+overwriting it), the new one takes its name, and the old one is deleted at the next start.
+"""
 from __future__ import annotations
 
+import hashlib
 import os
 import re
 import subprocess
 import sys
+import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable
@@ -13,38 +21,43 @@ import requests
 
 from .. import _version
 
+REPO_URL = "https://github.com/KrustyLeBot/Ecoutify/releases/tag/latest"
 API = "https://api.github.com/repos/KrustyLeBot/Ecoutify/releases/tags/latest"
-_UA = "Ecoutify-Windows/1.0 (https://github.com/KrustyLeBot/Ecoutify)"
+_UA = f"Ecoutify-Windows/{_version.BUILD} (https://github.com/KrustyLeBot/Ecoutify)"
 
 
 @dataclass
 class Release:
     build: int
     url: str
-    size: int
+    size: int = 0
+    sha256: str = ""
 
 
 def current_build() -> int:
     return int(_version.BUILD)
 
 
-def can_self_update() -> bool:
-    """Only the packaged .exe can replace itself."""
-    return bool(getattr(sys, "frozen", False))
+def running_exe() -> str | None:
+    """Path of the running Ecoutify.exe, or None when running from source."""
+    return sys.executable if getattr(sys, "frozen", False) else None
 
 
 def parse_release(data: dict) -> Release | None:
-    """The release title ends with the build number; the Windows asset is the .exe."""
+    """The release title ends with the build number; the Windows asset is the .exe (GitHub gives its SHA-256)."""
     match = re.search(r"(\d+)\s*$", data.get("name") or "")
     if not match:
         return None
     for asset in data.get("assets", []):
         if asset.get("name", "").lower().endswith(".exe"):
-            return Release(int(match[1]), asset["browser_download_url"], int(asset.get("size") or 0))
+            digest = str(asset.get("digest") or "")
+            return Release(int(match[1]), asset["browser_download_url"], int(asset.get("size") or 0),
+                           digest.removeprefix("sha256:").lower() if digest.startswith("sha256:") else "")
     return None
 
 
 def latest() -> Release | None:
+    """The published release, or None if there is none."""
     response = requests.get(API, headers={"Accept": "application/vnd.github+json", "User-Agent": _UA}, timeout=15)
     if response.status_code == 404:
         return None
@@ -52,43 +65,69 @@ def latest() -> Release | None:
     return parse_release(response.json())
 
 
-def download(release: Release, dest: Path, on_progress: Callable[[int], None] | None = None) -> Path:
-    dest.parent.mkdir(parents=True, exist_ok=True)
-    part = dest.with_name(dest.name + ".part")
-    with requests.get(release.url, headers={"User-Agent": _UA}, stream=True, timeout=30) as response:
+def is_newer(release: Release) -> bool:
+    return release.build > current_build()
+
+
+def download(release: Release, progress: Callable[[int, int], None] | None = None) -> str:
+    """Downloads the new executable to a temp file and verifies it; returns its path."""
+    target = os.path.join(tempfile.gettempdir(), f"Ecoutify-{release.build}.exe.download")
+    digest, done = hashlib.sha256(), 0
+    with requests.get(release.url, headers={"User-Agent": _UA}, stream=True, timeout=60) as response, open(target, "wb") as out:
         response.raise_for_status()
         total = int(response.headers.get("Content-Length") or release.size or 0)
-        done = 0
-        with open(part, "wb") as out:
-            for chunk in response.iter_content(256 * 1024):
-                out.write(chunk)
-                done += len(chunk)
-                if on_progress and total:
-                    on_progress(min(100, done * 100 // total))
-    os.replace(part, dest)
-    return dest
+        for chunk in response.iter_content(256 * 1024):
+            out.write(chunk)
+            digest.update(chunk)
+            done += len(chunk)
+            if progress:
+                progress(done, total)
+    # A truncated, stale (CDN cache) or tampered download must never replace a working executable.
+    if release.size and done != release.size:
+        os.remove(target)
+        raise OSError(f"Téléchargement incomplet ({done} octets sur {release.size})")
+    if release.sha256 and digest.hexdigest() != release.sha256:
+        os.remove(target)
+        raise OSError("Le fichier téléchargé ne correspond pas à l'empreinte SHA-256 publiée")
+    return target
 
 
-def apply_and_restart(new_exe: Path) -> None:
-    """Starts a small script that waits for this process to exit, replaces the .exe, and relaunches it.
-    The caller must quit the application right after."""
-    target = Path(sys.executable)
-    script = new_exe.with_suffix(".update.bat")
-    script.write_text(
-        "@echo off\r\n"
-        "set /a tries=0\r\n"
-        ":retry\r\n"
-        "timeout /t 1 /nobreak >nul\r\n"
-        f'copy /y "{new_exe}" "{target}" >nul 2>&1\r\n'
-        "if not errorlevel 1 goto done\r\n"
-        "set /a tries+=1\r\n"
-        "if %tries% LSS 60 goto retry\r\n"
-        "exit /b 1\r\n"
-        ":done\r\n"
-        f'start "" "{target}"\r\n'
-        f'del "{new_exe}" >nul 2>&1\r\n'
-        '(goto) 2>nul & del "%~f0"\r\n',
-        encoding="utf-8",
-    )
-    flags = getattr(subprocess, "DETACHED_PROCESS", 0) | getattr(subprocess, "CREATE_NO_WINDOW", 0)
-    subprocess.Popen(["cmd", "/c", str(script)], creationflags=flags, close_fds=True)
+def install(current_exe: str, new_file: str) -> str:
+    """Puts new_file in place of current_exe, which may be running."""
+    old = current_exe + ".old"
+    if os.path.exists(old):
+        os.remove(old)
+    os.replace(current_exe, old)
+    try:
+        os.replace(new_file, current_exe)
+    except OSError:
+        os.replace(old, current_exe)  # put the working version back
+        raise
+    return current_exe
+
+
+def relaunch(exe: str) -> None:
+    # A onefile exe started by another one inherits its bootloader variables, takes itself for that process's
+    # child and loads its files from the parent's temp folder, deleted as the parent exits. The reset makes the
+    # new version unpack its own files.
+    env = {k: v for k, v in os.environ.items() if not k.startswith(("_PYI", "_MEIPASS"))}
+    env["PYINSTALLER_RESET_ENVIRONMENT"] = "1"
+    flags = getattr(subprocess, "DETACHED_PROCESS", 0) | getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
+    subprocess.Popen([exe], creationflags=flags, close_fds=True, cwd=os.path.dirname(exe), env=env)
+
+
+def cleanup_previous(exe: str | None = None) -> bool:
+    """Removes the executable left behind by the last self-update; True once nothing is left.
+
+    Right after an update the previous process is still exiting and keeps the .old file locked for a few
+    seconds, so callers retry until this returns True.
+    """
+    exe = exe or running_exe()
+    old = exe + ".old" if exe else ""
+    if not old or not os.path.exists(old):
+        return True
+    try:
+        os.remove(old)
+        return True
+    except OSError:
+        return False

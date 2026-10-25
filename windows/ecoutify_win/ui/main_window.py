@@ -3,24 +3,24 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import QTimer
 from PySide6.QtWidgets import (QApplication, QFileDialog, QHBoxLayout, QListWidget, QMainWindow, QMessageBox,
-                               QProgressDialog, QStackedWidget, QVBoxLayout, QWidget)
+                               QStackedWidget, QVBoxLayout, QWidget)
 
 from ..services import updater
 from ..services.async_util import run_async
 from .pages import ForYouPage, LibraryPage, SearchPage
 from .player_bar import PlayerBar
+from .update_toast import UpdateToast
 
 
 class MainWindow(QMainWindow):
-    update_progress = Signal(int)
-
     def __init__(self, ctx):
         super().__init__()
         self.ctx = ctx
         self.resize(1200, 760)
-        self._update_dialog: QProgressDialog | None = None
+        self.toast: UpdateToast | None = None
+        self._cleanup_tries = 0
 
         self.nav = QListWidget()
         self.nav.setObjectName("nav")
@@ -48,17 +48,25 @@ class MainWindow(QMainWindow):
 
         menu = self.menuBar().addMenu("Ecoutify")
         menu.addAction("Dossier de travail…", self.choose_workdir)
-        menu.addAction("Rechercher une mise à jour", lambda: self.check_updates(silent=False))
+        menu.addAction("Rechercher une mise à jour", lambda: self.check_updates(manual=True))
         menu.addSeparator()
         menu.addAction("Quitter", QApplication.quit)
 
         ctx.message.connect(lambda text: self.statusBar().showMessage(text, 8000))
         ctx.player.message.connect(lambda text: self.statusBar().showMessage(text, 8000))
-        self.update_progress.connect(self._on_update_progress)
         self._retitle()
         self.for_you.refresh()
         ctx.downloads.sync_keep_offline()
-        self.check_updates(silent=True)
+        # the previous exe (after a self-update) is deleted once its process is gone
+        self._cleanup_timer = QTimer(self)
+        self._cleanup_timer.timeout.connect(self._cleanup_old_exe)
+        if not updater.cleanup_previous():
+            self._cleanup_timer.start(2000)
+        # update check shortly after the start, then every 6 hours
+        QTimer.singleShot(5000, self.check_updates)
+        self._update_timer = QTimer(self)
+        self._update_timer.timeout.connect(self.check_updates)
+        self._update_timer.start(6 * 3600 * 1000)
 
     def _retitle(self) -> None:
         self.setWindowTitle(f"Ecoutify — {self.ctx.store.root} (build {updater.current_build()})")
@@ -72,53 +80,39 @@ class MainWindow(QMainWindow):
             self.statusBar().showMessage(f"Dossier de travail : {path}", 8000)
 
     # --- updates ---
-    def check_updates(self, silent: bool) -> None:
+    def check_updates(self, manual: bool = False) -> None:
+        """Quiet check at startup and every 6 hours; 'manual' (menu) also says when there is nothing new."""
         if not self.ctx.online():
-            if not silent:
+            if manual:
                 self.statusBar().showMessage("Mise à jour impossible hors ligne", 6000)
             return
 
         def done(result) -> None:
             if isinstance(result, Exception):
-                if not silent:
-                    self.statusBar().showMessage(f"Vérification impossible : {result}", 8000)
+                if manual:
+                    QMessageBox.warning(self, "Mise à jour", f"Vérification impossible : {result}")
                 return
-            if result is None or result.build <= updater.current_build():
-                if not silent:
+            if result is None or not updater.is_newer(result):
+                if manual:
                     QMessageBox.information(self, "Mise à jour", f"Tu as la dernière version (build {updater.current_build()}).")
                 return
-            self._offer(result)
+            if self.toast is None or self.toast.release.build != result.build:
+                self.toast = UpdateToast(self, result)
+            self.toast.place()
+            self.toast.show()
 
         run_async(updater.latest, done, done)
 
-    def _offer(self, release: updater.Release) -> None:
-        if not updater.can_self_update():
-            self.statusBar().showMessage(f"Mise à jour disponible : build {release.build} (le programme packagé peut l'installer)", 10000)
-            return
-        size = f" ({release.size // 1_000_000} Mo)" if release.size else ""
-        if QMessageBox.question(self, "Mise à jour disponible", f"Le build {release.build} est disponible{size}. L'installer maintenant ?") != QMessageBox.StandardButton.Yes:
-            return
-        self._update_dialog = QProgressDialog("Téléchargement de la mise à jour…", None, 0, 100, self)
-        self._update_dialog.setWindowModality(Qt.WindowModality.WindowModal)
-        self._update_dialog.setAutoClose(False)
-        self._update_dialog.show()
-        target = self.ctx.cache_dir / "update" / "Ecoutify-new.exe"
+    def _cleanup_old_exe(self) -> None:
+        """The previous .exe stays locked while that process exits: retry every 2 s for 2 minutes."""
+        self._cleanup_tries += 1
+        if updater.cleanup_previous() or self._cleanup_tries >= 60:
+            self._cleanup_timer.stop()
 
-        def done(result) -> None:
-            if self._update_dialog:
-                self._update_dialog.close()
-            if isinstance(result, Exception):
-                QMessageBox.warning(self, "Mise à jour", f"Téléchargement impossible : {result}")
-                return
-            self.ctx.player.stop()
-            updater.apply_and_restart(result)
-            QApplication.quit()
-
-        run_async(lambda: updater.download(release, target, self.update_progress.emit), done, done)
-
-    def _on_update_progress(self, pct: int) -> None:
-        if self._update_dialog:
-            self._update_dialog.setValue(pct)
+    def resizeEvent(self, event) -> None:
+        super().resizeEvent(event)
+        if self.toast is not None and self.toast.isVisible():
+            self.toast.place()  # stays pinned to the top-right corner
 
     def closeEvent(self, event) -> None:
         self.ctx.player.stop()

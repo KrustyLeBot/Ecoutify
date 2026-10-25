@@ -8,6 +8,7 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import org.json.JSONObject
 import java.io.File
+import java.security.MessageDigest
 
 /**
  * In-app updates from the `latest` GitHub release (published by the CI with the APK as a plain asset).
@@ -17,7 +18,7 @@ import java.io.File
 class Updater(private val context: Context, private val client: OkHttpClient) {
 
     /** [build] is the CI run number, which is also the app's version code. */
-    data class Release(val build: Int, val url: String, val sizeBytes: Long)
+    data class Release(val build: Int, val url: String, val sizeBytes: Long, val sha256: String = "")
 
     private val dir: File get() = File(context.cacheDir, "updates")
 
@@ -37,7 +38,9 @@ class Updater(private val context: Context, private val client: OkHttpClient) {
             for (i in 0 until assets.length()) {
                 val asset = assets.getJSONObject(i)
                 if (asset.optString("name").endsWith(".apk")) {
-                    return Release(build, asset.getString("browser_download_url"), asset.optLong("size"))
+                    // GitHub publishes the asset's SHA-256 as "sha256:<hex>"
+                    val digest = asset.optString("digest").removePrefix("sha256:").takeIf { asset.optString("digest").startsWith("sha256:") }.orEmpty()
+                    return Release(build, asset.getString("browser_download_url"), asset.optLong("size"), digest.lowercase())
                 }
             }
             return null
@@ -57,6 +60,7 @@ class Updater(private val context: Context, private val client: OkHttpClient) {
             val total = (body.contentLength().takeIf { it > 0 } ?: release.sizeBytes).coerceAtLeast(1)
             var done = 0L
             var last = -1
+            val sha = MessageDigest.getInstance("SHA-256")
             body.byteStream().use { input ->
                 part.outputStream().use { output ->
                     val buffer = ByteArray(64 * 1024)
@@ -64,6 +68,7 @@ class Updater(private val context: Context, private val client: OkHttpClient) {
                         val n = input.read(buffer)
                         if (n < 0) break
                         output.write(buffer, 0, n)
+                        sha.update(buffer, 0, n)
                         done += n
                         val pct = (done * 100 / total).toInt().coerceAtMost(100)
                         if (pct != last) {
@@ -73,6 +78,14 @@ class Updater(private val context: Context, private val client: OkHttpClient) {
                     }
                 }
             }
+        }
+        if (release.sizeBytes > 0 && part.length() != release.sizeBytes) {
+            part.delete()
+            error("Téléchargement incomplet")
+        }
+        if (release.sha256.isNotEmpty() && sha.digest().joinToString("") { "%02x".format(it) } != release.sha256) {
+            part.delete()
+            error("Le fichier téléchargé ne correspond pas à l'empreinte SHA-256 publiée")
         }
         check(part.renameTo(target)) { "Impossible d'enregistrer la mise à jour" }
         return target

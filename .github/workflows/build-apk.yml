@@ -1,4 +1,7 @@
-name: Build
+name: Build APK
+
+# The file keeps its name on purpose: GitHub numbers the runs per workflow file, and that number is the
+# Android version code, which must only ever go up.
 
 on:
   push:

@@ -88,3 +88,15 @@ def test_player_queue_always_loops_and_shuffles(window, monkeypatch):
         assert sorted(lap) == [0, 1, 2, 3]  # every track exactly once per lap: random order, nothing skipped
     player.previous()
     assert played[-1] == played[-2] or len(played) == 11
+
+
+def test_update_toast_is_shown_and_pinned_top_right(window):
+    from ecoutify_win.services import updater
+    from ecoutify_win.ui.update_toast import UpdateToast
+
+    toast = UpdateToast(window, updater.Release(updater.current_build() + 1, "http://example/Ecoutify.exe", 10, ""))
+    window.toast = toast
+    toast.show()
+    toast.place()
+    assert toast.isVisible() and toast.x() + toast.width() <= window.width()
+    assert "build" in toast.text.text()

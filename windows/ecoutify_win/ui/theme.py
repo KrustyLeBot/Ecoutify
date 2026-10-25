@@ -39,6 +39,9 @@ def _stylesheet(c: dict) -> str:
     QPushButton#primary {{ background: {c['accent']}; color: {c['on_accent']}; font-weight: bold; }}
     QLineEdit {{ background: {c['surface']}; border: 1px solid {c['outline']}; border-radius: 16px; padding: 7px 14px; }}
     QWidget#playerbar {{ background: {c['surface']}; border-top: 1px solid {c['outline']}; }}
+    QFrame#toast {{ background: {c['high']}; border: 1px solid {c['outline']}; border-radius: 12px; }}
+    QProgressBar {{ background: {c['outline']}; border: none; border-radius: 2px; }}
+    QProgressBar::chunk {{ background: {c['accent']}; border-radius: 2px; }}
     QLabel#dim {{ color: {c['dim']}; }}
     QLabel#title {{ font-size: 20px; font-weight: bold; }}
     QSlider::groove:horizontal {{ height: 4px; background: {c['outline']}; border-radius: 2px; }}

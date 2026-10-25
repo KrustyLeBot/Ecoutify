@@ -28,7 +28,7 @@ It works on the **same `Ecoutify/` folder** as the phone (`music/`, `covers/`, `
 
 ## Getting the apps
 
-GitHub Actions (`.github/workflows/build.yml`) builds the APK and the Windows exe on every push to `main`. When both succeed, they are published as plain `ecoutify.apk` and `Ecoutify.exe` in the **`latest` release** (https://github.com/KrustyLeBot/Ecoutify/releases/tag/latest), replacing the previous one. Download them from there (the run's artifacts also keep a copy for 7 days). The APK installs on the phone; `Ecoutify.exe` runs on Windows and updates itself from the same release (menu *Ecoutify → Rechercher une mise à jour*, plus a quiet check at startup).
+GitHub Actions (`.github/workflows/build-apk.yml`) builds the APK and the Windows exe on every push to `main`. When both succeed, they are published as plain `ecoutify.apk` and `Ecoutify.exe` in the **`latest` release** (https://github.com/KrustyLeBot/Ecoutify/releases/tag/latest), replacing the previous one. Download them from there (the run's artifacts also keep a copy for 7 days). The APK installs on the phone; `Ecoutify.exe` runs on Windows and updates itself from the same release (menu *Ecoutify → Rechercher une mise à jour*, plus a quiet check at startup).
 
 **Updates from the app**: Library tab → "Mise à jour" → "Vérifier" (the app also checks quietly at startup and shows a dot on the Library tab when a newer build exists). It downloads the APK into the app cache and opens Android's installer; the first time, Android asks to allow Ecoutify to install apps. The downloaded file is deleted at the next app start once the installed build has caught up with it.
 

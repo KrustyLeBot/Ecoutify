@@ -116,3 +116,8 @@ def test_release_parsing():
     assert (release.build, release.url, release.size) == (42, "b", 2)
     assert parse_release({"name": "no number", "assets": []}) is None
     assert parse_release({"name": "build 5", "assets": [{"name": "ecoutify.apk", "browser_download_url": "a"}]}) is None
+
+
+def test_release_digest_is_read():
+    data = {"name": "Ecoutify build 7", "assets": [{"name": "Ecoutify.exe", "browser_download_url": "b", "size": 3, "digest": "sha256:ABCDEF"}]}
+    assert parse_release(data).sha256 == "abcdef"
