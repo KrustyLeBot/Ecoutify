@@ -7,3 +7,11 @@ local.properties
 *.keystore
 captures/
 .cxx/
+
+# Windows client
+__pycache__/
+*.pyc
+windows/build/
+windows/dist/
+windows/*.spec
+.pytest_cache/

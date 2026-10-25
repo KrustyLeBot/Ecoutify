@@ -1,0 +1,93 @@
+name: Build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  android:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Build debug APK
+        shell: bash
+        run: |
+          set -o pipefail
+          ./gradlew assembleDebug --console=plain 2>&1 | tee build.log
+      - name: Show compile errors
+        if: failure()
+        run: |
+          grep -E '^e: |error:|What went wrong|Execution failed' -A3 build.log | head -80 || true
+      - name: Name the APK
+        run: cp app/build/outputs/apk/debug/app-debug.apk ecoutify.apk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ecoutify-android
+          path: ecoutify.apk
+          retention-days: 7
+
+  windows:
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: windows
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: windows/requirements.txt
+      - name: Install dependencies
+        run: pip install -r requirements.txt pyinstaller pytest
+      - name: Stamp the build number (same as the Android version code)
+        shell: bash
+        run: echo "BUILD = ${{ github.run_number }}" > ecoutify_win/_version.py
+      - name: Tests
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: python -m pytest tests -q
+      - name: Build the exe
+        run: >
+          pyinstaller --noconfirm --onefile --windowed --name Ecoutify
+          --icon ecoutify_win/assets/icon.ico
+          --add-data "ecoutify_win/assets;ecoutify_win/assets"
+          --collect-all yt_dlp --collect-all ytmusicapi
+          run.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ecoutify-windows
+          path: windows/dist/Ecoutify.exe
+          retention-days: 7
+
+  # One "latest" release holds the newest successful build of both apps: ecoutify.apk and Ecoutify.exe.
+  # Both apps read it to offer updates; its title ends with the build number (= the run number).
+  release:
+    needs: [android, windows]
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # needed to publish the release
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+      - name: Publish the "latest" release
+        shell: bash
+        run: |
+          gh release delete latest --cleanup-tag --yes || true
+          gh release create latest dist/ecoutify-android/ecoutify.apk dist/ecoutify-windows/Ecoutify.exe \
+            --title "Ecoutify build ${{ github.run_number }}" \
+            --notes "Build ${{ github.run_number }} of commit ${{ github.sha }}: Android (ecoutify.apk) and Windows (Ecoutify.exe)." \
+            --target "${{ github.sha }}" \
+            --latest

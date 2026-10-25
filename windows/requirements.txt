@@ -1,0 +1,4 @@
+PySide6-Essentials>=6.7
+yt-dlp
+ytmusicapi>=1.8
+requests>=2.31
