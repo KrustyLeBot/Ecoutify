@@ -34,12 +34,12 @@ def _stylesheet(c: dict) -> str:
     QTreeWidget, QListWidget {{ border: none; outline: 0; }}
     QTreeWidget::item {{ padding: 3px 0; }}
     QHeaderView::section {{ background: {c['bg']}; color: {c['dim']}; border: none; padding: 6px; }}
-    QPushButton {{ background: {c['high']}; border: none; border-radius: 8px; padding: 7px 14px; }}
-    QPushButton:hover {{ background: {c['outline']}; }}
-    QPushButton#primary {{ background: {c['accent']}; color: {c['on_accent']}; font-weight: bold; }}
+    QPushButton {{ background: transparent; color: {c['accent']}; border: none; border-radius: 18px; padding: 8px 16px; }}
+    QPushButton:hover {{ background: {c['high']}; }}
+    QPushButton#primary {{ background: {c['accent']}; color: {c['on_accent']}; }}
     QLineEdit {{ background: {c['surface']}; border: 1px solid {c['outline']}; border-radius: 16px; padding: 7px 14px; }}
     QWidget#playerbar {{ background: {c['surface']}; border-top: 1px solid {c['outline']}; }}
-    QFrame#toast {{ background: {c['high']}; border: 1px solid {c['outline']}; border-radius: 12px; }}
+    QFrame#toast {{ background: {c['high']}; border: 1px solid {c['outline']}; border-radius: 16px; }}
     QProgressBar {{ background: {c['outline']}; border: none; border-radius: 2px; }}
     QProgressBar::chunk {{ background: {c['accent']}; border-radius: 2px; }}
     QLabel#dim {{ color: {c['dim']}; }}

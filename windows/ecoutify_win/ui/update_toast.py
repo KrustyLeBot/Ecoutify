@@ -1,4 +1,3 @@
-"""Top-right notification offering the new version, with a one-click self-update (like GitEnough's)."""
 from __future__ import annotations
 
 import threading
@@ -17,7 +16,7 @@ class UpdateToast(QFrame):
         self.main, self.release = main, release
         self._progress = (0, 0)
         self._lock = threading.Lock()
-        self.setObjectName("toast")
+        self.setObjectName("toast")  # styled in the stylesheet (QFrame#toast)
         self.setFixedWidth(380)
         layout = QVBoxLayout(self)
         layout.setContentsMargins(16, 14, 12, 14)
@@ -34,8 +33,10 @@ class UpdateToast(QFrame):
         head.addWidget(close)
         layout.addLayout(head)
 
-        self.text = QLabel(f"Ecoutify build <b>{release.build}</b> est disponible (tu as le build {updater.current_build()}).")
+        self.text = QLabel(f"Ecoutify build <b>{release.build}</b> est disponible "
+                           f"(tu as le build {updater.current_build()}).")
         self.text.setWordWrap(True)
+        self.text.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         self.text.setTextFormat(Qt.TextFormat.RichText)
         layout.addWidget(self.text)
 
@@ -56,9 +57,14 @@ class UpdateToast(QFrame):
         buttons.addWidget(self.update_button)
         layout.addLayout(buttons)
 
-        self.poll = QTimer(self)
+        self.poll = QTimer(self)  # the download thread only stores its progress; the UI polls it
         self.poll.setInterval(150)
         self.poll.timeout.connect(self._show_progress)
+        self.adjustSize()
+        self.place()
+
+    def _fit(self) -> None:
+        """Grows the card to show the whole (possibly long) message, then keeps it in its corner."""
         self.adjustSize()
         self.place()
 
@@ -83,7 +89,9 @@ class UpdateToast(QFrame):
             with self._lock:  # called on the download thread
                 self._progress = (done, total)
 
-        run_async(lambda: updater.download(self.release, progress), lambda path: self._downloaded(exe, path), lambda err: self._downloaded(exe, None, err))
+        run_async(lambda: updater.download(self.release, progress),
+                  lambda path: self._downloaded(exe, path),
+                  lambda err: self._downloaded(exe, None, err))
 
     def _show_progress(self) -> None:
         with self._lock:
@@ -104,13 +112,17 @@ class UpdateToast(QFrame):
             self.update_button.clicked.disconnect()
             self.update_button.clicked.connect(lambda: QDesktopServices.openUrl(QUrl(updater.REPO_URL)))
             self.later.setEnabled(True)
+            self._fit()
             return
         try:
             updater.install(exe, path)
             updater.relaunch(exe)
         except OSError as exc:
             self.text.setText(f"<span style='color:#E5484D'>Impossible de remplacer l'exécutable : {exc}</span>")
+            self.bar.hide()
+            self.update_button.setEnabled(True)
             self.later.setEnabled(True)
+            self._fit()
             return
         self.text.setText("Redémarrage sur la nouvelle version…")
         QTimer.singleShot(300, self.main.close)
