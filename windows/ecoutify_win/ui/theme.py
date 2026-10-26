@@ -5,8 +5,8 @@ from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor, QGuiApplication, QPalette
 from PySide6.QtWidgets import QApplication
 
-DARK = dict(bg="#0B0B10", surface="#15151C", high="#1D1D26", text="#F2F2F7", dim="#A7A7B8", accent="#A99BFF", on_accent="#1A1442", outline="#2E2E3A")
-LIGHT = dict(bg="#F8F7FC", surface="#EFEDF7", high="#E6E3F2", text="#16141F", dim="#5C5A6B", accent="#5B47E0", on_accent="#FFFFFF", outline="#D2CFE0")
+DARK = dict(bg="#0A0F0E", surface="#131B1A", high="#192120", text="#DCE8E5", dim="#A2ADAA", accent="#5ADACA", on_accent="#003732", outline="#3F4A48")
+LIGHT = dict(bg="#F6FAF8", surface="#E7F0ED", high="#E1EAE7", text="#2A3432", dim="#56615F", accent="#006A61", on_accent="#FFFFFF", outline="#A9B4B1")
 
 
 def _palette(c: dict) -> QPalette:
