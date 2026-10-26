@@ -152,9 +152,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     /** A sync is running: playlists and downloads are read-only (playback still works) until it ends. */
     var syncing by mutableStateOf(false)
         private set
-    /** Synchrotron is installed but does not sync the Ecoutify folder yet: offer to set it up. */
-    var offerSyncSetup by mutableStateOf(false)
-        private set
     private var stopSync: (() -> Unit)? = null
 
     /** Asks Synchrotron for a sync so the library is up to date when the app opens. */
@@ -176,7 +173,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 SyncState.TimedOut -> { syncing = false; message = "Synchro longue : elle continue en arrière-plan" }
                 is SyncState.Skipped -> {
                     syncing = false
-                    offerSyncSetup = state.reason == SkipReason.NOT_REGISTERED && !app.store.syncHintDismissed
                     if (state.reason == SkipReason.NEEDS_SETUP) message = "Termine la configuration dans Synchrotron"
                     adoptLater()
                 }
@@ -186,20 +182,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     private fun adoptLater() {
         viewModelScope.launch { reloadFromDisk(adopt = true) }
-    }
-
-    fun setUpSync() {
-        offerSyncSetup = false
-        SynchrotronClient.registerFolder(
-            app, app.store.syncPath, "Ecoutify",
-            remotePath = "Apps/Ecoutify", conflictPolicy = "NEWER", intervalMinutes = 180, watchChanges = true,
-            exclusions = listOf("*.part", "*.tmp"), // unfinished downloads and atomic-write temporaries
-        )
-    }
-
-    fun dismissSyncSetup() {
-        offerSyncSetup = false
-        app.store.syncHintDismissed = true
     }
 
     override fun onCleared() {

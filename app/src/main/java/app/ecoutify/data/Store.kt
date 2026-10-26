@@ -75,11 +75,6 @@ class Store(private val context: Context) {
         }
     }
 
-    /** The user said "later" to the Synchrotron suggestion. */
-    var syncHintDismissed: Boolean
-        get() = prefs.getBoolean("sync_hint_dismissed", false)
-        set(v) = prefs.edit().putBoolean("sync_hint_dismissed", v).apply()
-
     // --- History ---
     fun history(): List<Track> = readList("history")
 

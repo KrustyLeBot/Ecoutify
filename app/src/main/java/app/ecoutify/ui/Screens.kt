@@ -123,7 +123,6 @@ fun EcoutifyScreen(vm: MainViewModel) {
                 if (!vm.storageOk) StorageBanner()
                 if (!vm.online) OfflineBanner()
                 if (vm.syncing) SyncBanner()
-                else if (vm.offerSyncSetup) SyncSetupBanner(onSetUp = vm::setUpSync, onLater = vm::dismissSyncSetup)
                 when (tab) {
                     Tab.Home -> HomeScreen(vm)
                     Tab.Search -> SearchScreen(vm)
@@ -176,23 +175,6 @@ private fun SyncBanner() {
                 style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
             )
             androidx.compose.material3.LinearProgressIndicator(Modifier.fillMaxWidth())
-        }
-    }
-}
-
-@Composable
-private fun SyncSetupBanner(onSetUp: () -> Unit, onLater: () -> Unit) {
-    CompositionLocalProvider(LocalContentColor provides MaterialTheme.colorScheme.onSecondaryContainer) {
-        Row(
-            Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.secondaryContainer).padding(start = 16.dp, end = 4.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(
-                "Retrouve ta bibliothèque sur tous tes appareils avec Proton Drive.",
-                style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f).padding(vertical = 8.dp),
-            )
-            androidx.compose.material3.TextButton(onClick = onSetUp) { Text("Configurer") }
-            androidx.compose.material3.TextButton(onClick = onLater) { Text("Plus tard") }
         }
     }
 }
