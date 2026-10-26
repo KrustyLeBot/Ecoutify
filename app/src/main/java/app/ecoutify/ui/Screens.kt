@@ -1,5 +1,17 @@
 package app.ecoutify.ui
 
+import app.ecoutify.suite.AboutSettings
+import app.ecoutify.suite.ConfirmDialog
+import app.ecoutify.suite.SuiteBanner
+import app.ecoutify.suite.SuiteTopBar
+import app.ecoutify.suite.SyncSettings
+import app.ecoutify.suite.Tone
+import app.ecoutify.suite.UpdateBanner
+import app.ecoutify.suite.UpdateSettings
+import androidx.compose.material.icons.filled.Folder
+import androidx.compose.material.icons.filled.Settings as SettingsIcon
+import androidx.compose.material.icons.filled.Sync
+import androidx.compose.foundation.verticalScroll
 import android.Manifest
 import android.app.Activity
 import android.content.Intent
@@ -64,23 +76,13 @@ fun EcoutifyScreen(vm: MainViewModel) {
     var tab by rememberSaveable { mutableStateOf(Tab.Home) }
     var openList by rememberSaveable { mutableStateOf<String?>(null) }
     var showPlayer by rememberSaveable { mutableStateOf(false) }
+    var showSettings by rememberSaveable { mutableStateOf(false) }
     val snackbar = remember { SnackbarHostState() }
 
     LaunchedEffect(vm.message) {
         vm.message?.let {
             snackbar.showSnackbar(it)
             vm.message = null
-        }
-    }
-    val context = LocalContext.current
-    LaunchedEffect(vm.pendingInstall) {
-        val apk = vm.pendingInstall ?: return@LaunchedEffect
-        vm.pendingInstall = null
-        if (context.packageManager.canRequestPackageInstalls()) {
-            context.startActivity(vm.installIntent(apk))
-        } else {
-            vm.message = "Autorise Ecoutify à installer des applications, puis relance la mise à jour"
-            context.startActivity(Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:${context.packageName}")))
         }
     }
     LaunchedEffect(vm.shareRequest) {
@@ -90,6 +92,7 @@ fun EcoutifyScreen(vm: MainViewModel) {
         }
     }
     BackHandler(enabled = showPlayer) { showPlayer = false }
+    BackHandler(enabled = showSettings && !showPlayer) { showSettings = false }
     BackHandler(enabled = !showPlayer && tab == Tab.Library && openList != null) { openList = null }
 
     Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
@@ -107,11 +110,7 @@ fun EcoutifyScreen(vm: MainViewModel) {
                                     if (tab == it && it == Tab.Library) openList = null
                                     tab = it
                                 },
-                                icon = {
-                                    BadgedBox(badge = { if (it == Tab.Library && vm.updateAvailable != null) Badge() }) {
-                                        Icon(it.icon, it.label)
-                                    }
-                                },
+                                icon = { Icon(it.icon, it.label) },
                                 label = { Text(it.label) },
                             )
                         }
@@ -121,18 +120,20 @@ fun EcoutifyScreen(vm: MainViewModel) {
         ) { padding ->
             Column(Modifier.padding(padding).fillMaxSize()) {
                 if (!vm.storageOk) StorageBanner()
-                if (!vm.online) OfflineBanner()
-                if (vm.syncing) SyncBanner()
+                if (!vm.online) SuiteBanner("Seuls les titres téléchargés sont lisibles.", title = "Hors ligne", icon = Icons.Default.WifiOff)
+                if (vm.syncing) SuiteBanner("Playlists en lecture seule le temps de la synchro.", title = "Synchronisation avec Proton Drive", icon = Icons.Default.Sync, progress = -1f)
+                UpdateBanner(vm.updates)
                 when (tab) {
                     Tab.Home -> HomeScreen(vm)
                     Tab.Search -> SearchScreen(vm)
-                    Tab.Library -> LibraryScreen(vm, openList) { openList = it }
+                    Tab.Library -> LibraryScreen(vm, openList, onSettings = { showSettings = true }) { openList = it }
                 }
             }
         }
         vm.importDialog?.let { initial ->
             ImportDialog(vm, initial) { vm.importDialog = null }
         }
+        if (showSettings) SettingsScreen(vm, onBack = { showSettings = false })
         if (showPlayer) PlayerScreen(vm, onClose = { showPlayer = false })
     }
 }
@@ -140,16 +141,10 @@ fun EcoutifyScreen(vm: MainViewModel) {
 @Composable
 private fun StorageBanner() {
     val context = LocalContext.current
-    CompositionLocalProvider(LocalContentColor provides MaterialTheme.colorScheme.onPrimaryContainer) {
-    Row(
-        Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.primaryContainer)
-            .padding(start = 16.dp, end = 8.dp, top = 4.dp, bottom = 4.dp),
-        verticalAlignment = Alignment.CenterVertically,
+    SuiteBanner(
+        "Autorise l'accès aux fichiers pour garder tes musiques dans le dossier Ecoutify, même après désinstallation.",
+        tone = Tone.Accent, icon = Icons.Default.Folder,
     ) {
-        Text(
-            "Autorise l'accès aux fichiers pour garder tes musiques dans le dossier Ecoutify, même après désinstallation.",
-            style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f),
-        )
         TextButton(onClick = {
             if (Build.VERSION.SDK_INT >= 30) {
                 val intent = Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION, Uri.parse("package:${context.packageName}"))
@@ -163,33 +158,21 @@ private fun StorageBanner() {
             }
         }) { Text("Autoriser") }
     }
-    }
 }
 
+// ---------------------------------------------------------------- Settings
+
 @Composable
-private fun SyncBanner() {
-    CompositionLocalProvider(LocalContentColor provides MaterialTheme.colorScheme.onSecondaryContainer) {
-        Column(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.secondaryContainer)) {
-            Text(
-                "Synchronisation avec Proton Drive… (playlists en lecture seule)",
-                style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+private fun SettingsScreen(vm: MainViewModel, onBack: () -> Unit) {
+    Scaffold(topBar = { SuiteTopBar("Paramètres", onBack = onBack) }) { padding ->
+        Column(Modifier.padding(padding).fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp)) {
+            SyncSettings(vm.syncFolder)
+            UpdateSettings(vm.updates)
+            AboutSettings(
+                "Ecoutify",
+                "La musique de YouTube, téléchargée pour l'écoute hors ligne, sans compte ni publicité.",
             )
-            androidx.compose.material3.LinearProgressIndicator(Modifier.fillMaxWidth())
-        }
-    }
-}
-
-@Composable
-private fun OfflineBanner() {
-    CompositionLocalProvider(LocalContentColor provides MaterialTheme.colorScheme.onPrimaryContainer) {
-        Row(
-            Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.primaryContainer)
-                .padding(horizontal = 16.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Icon(Icons.Default.WifiOff, null, Modifier.size(18.dp))
-            Spacer(Modifier.width(8.dp))
-            Text("Hors ligne — seuls les titres téléchargés sont lisibles", style = MaterialTheme.typography.bodySmall)
+            Spacer(Modifier.height(32.dp))
         }
     }
 }
@@ -282,22 +265,23 @@ private fun SearchScreen(vm: MainViewModel) {
 // ---------------------------------------------------------------- Library
 
 @Composable
-private fun LibraryScreen(vm: MainViewModel, openList: String?, setOpen: (String?) -> Unit) {
+private fun LibraryScreen(vm: MainViewModel, openList: String?, onSettings: () -> Unit, setOpen: (String?) -> Unit) {
     val playlist = vm.playlists.firstOrNull { it.id == openList }
     when {
         playlist != null -> ListDetail(vm, playlist.name, playlist.tracks, playlist, setOpen)
-        else -> LibraryHome(vm, setOpen)
+        else -> LibraryHome(vm, onSettings, setOpen)
     }
 }
 
 @Composable
-private fun LibraryHome(vm: MainViewModel, setOpen: (String?) -> Unit) {
+private fun LibraryHome(vm: MainViewModel, onSettings: () -> Unit, setOpen: (String?) -> Unit) {
     var creating by remember { mutableStateOf(false) }
     var toDelete by remember { mutableStateOf<Playlist?>(null) }
     Column(Modifier.fillMaxSize()) {
         ScreenTitle("Bibliothèque") {
             IconButton(onClick = { vm.importDialog = "" }) { Icon(Icons.Default.Link, "Importer une playlist YouTube") }
             IconButton(onClick = { creating = true }) { Icon(Icons.Default.Add, "Nouvelle playlist") }
+            IconButton(onClick = onSettings) { Icon(Icons.Default.SettingsIcon, "Paramètres") }
         }
         if (vm.importing) {
             LinearProgressIndicator(Modifier.fillMaxWidth())
@@ -313,7 +297,6 @@ private fun LibraryHome(vm: MainViewModel, setOpen: (String?) -> Unit) {
                     onLongClick = { toDelete = p },
                 )
             }
-            item { UpdateRow(vm) }
             if (vm.playlists.isEmpty()) {
                 item { EmptyHint("Crée une playlist avec +, ajoute-y des titres (menu ⋮), puis télécharge-les.") }
             }
@@ -321,39 +304,10 @@ private fun LibraryHome(vm: MainViewModel, setOpen: (String?) -> Unit) {
     }
     if (creating) NameDialog("Nouvelle playlist", onDismiss = { creating = false }) { vm.createPlaylist(it) }
     toDelete?.let { p ->
-        AlertDialog(
-            onDismissRequest = { toDelete = null },
-            title = { Text("Supprimer « ${p.name} » ?") },
-            text = { Text("Les titres téléchargés restent sur le téléphone.") },
-            confirmButton = { TextButton(onClick = { vm.deletePlaylist(p); toDelete = null }) { Text("Supprimer") } },
-            dismissButton = { TextButton(onClick = { toDelete = null }) { Text("Annuler") } },
+        ConfirmDialog(
+            "Supprimer « ${p.name} » ?", "Les titres téléchargés restent sur le téléphone.", "Supprimer",
+            onConfirm = { vm.deletePlaylist(p) }, onDismiss = { toDelete = null }, destructive = true,
         )
-    }
-}
-
-@Composable
-private fun UpdateRow(vm: MainViewModel) {
-    Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-        Box(
-            Modifier.size(48.dp).clip(RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.surfaceContainerHigh),
-            contentAlignment = Alignment.Center,
-        ) { Icon(Icons.Default.SystemUpdate, null, tint = MaterialTheme.colorScheme.secondary) }
-        Spacer(Modifier.width(16.dp))
-        Column(Modifier.weight(1f)) {
-            Text("Mise à jour", style = MaterialTheme.typography.titleMedium)
-            Text(
-                vm.updateStatus ?: "Version actuelle : build ${vm.currentBuild}",
-                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-        val release = vm.updateAvailable
-        if (release != null) {
-            Button(onClick = vm::downloadUpdate, enabled = vm.updateProgress == null) {
-                Text(vm.updateProgress?.let { "$it %" } ?: "Installer (${release.sizeBytes / 1_000_000} Mo)")
-            }
-        } else {
-            TextButton(onClick = { vm.checkUpdate() }) { Text("Vérifier") }
-        }
     }
 }
 

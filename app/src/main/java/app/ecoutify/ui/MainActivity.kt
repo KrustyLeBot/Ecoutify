@@ -37,6 +37,7 @@ class MainActivity : ComponentActivity() {
         super.onResume()
         vm.refreshStorage()
         vm.syncOnOpen()
+        vm.updates.checkOnOpen()
     }
 
     override fun onDestroy() {

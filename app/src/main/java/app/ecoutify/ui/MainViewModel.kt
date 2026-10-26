@@ -19,7 +19,7 @@ import app.ecoutify.data.Playlist
 import app.ecoutify.sync.SkipReason
 import app.ecoutify.sync.SyncState
 import app.ecoutify.sync.SynchrotronClient
-import app.ecoutify.data.Updater
+import app.ecoutify.suite.SuiteUpdates
 import app.ecoutify.data.Track
 import app.ecoutify.playback.PlayerConnection
 import app.ecoutify.widget.PlaylistWidgetProvider
@@ -53,16 +53,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         private set
     private var coverVersion by mutableIntStateOf(0)
 
-    // --- App updates ---
-    val currentBuild = app.updater.currentBuild()
-    var updateAvailable by mutableStateOf<Updater.Release?>(null)
-        private set
-    var updateStatus by mutableStateOf<String?>(null)
-        private set
-    var updateProgress by mutableStateOf<Int?>(null)
-        private set
-    /** A downloaded update waiting to be handed to the system installer (consumed by the UI). */
-    var pendingInstall by mutableStateOf<File?>(null)
+    val updates = SuiteUpdates(app, app.updater, viewModelScope)
+    val syncFolder: String get() = app.store.syncPath
     private var coverJob: Job? = null
     private var runningDownloads = emptyMap<String, Int>()
     private var queuedDownloads = emptySet<String>()
@@ -409,41 +401,4 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val target = app.store.playlists().firstOrNull { it.name == "Récupérés" } ?: app.store.createPlaylist("Récupérés")
         orphans.forEach { app.store.addToPlaylist(target.id, it) }
     }
-
-    // --- App updates ---
-    /** Looks for a newer build in the `latest` GitHub release. [silent]: no message unless one is found. */
-    fun checkUpdate(silent: Boolean = false) {
-        if (!silent) updateStatus = "Recherche en cours…"
-        viewModelScope.launch {
-            try {
-                val release = withContext(Dispatchers.IO) { app.updater.latest() }
-                if (release != null && release.build > currentBuild) {
-                    updateAvailable = release
-                    updateStatus = "Mise à jour disponible : build ${release.build}"
-                } else {
-                    updateAvailable = null
-                    if (!silent) updateStatus = "Tu as la dernière version (build $currentBuild)"
-                }
-            } catch (e: Exception) {
-                if (!silent) updateStatus = "Vérification impossible : ${e.message}"
-            }
-        }
-    }
-
-    fun downloadUpdate() {
-        val release = updateAvailable ?: return
-        if (updateProgress != null) return
-        updateProgress = 0
-        viewModelScope.launch {
-            try {
-                pendingInstall = withContext(Dispatchers.IO) { app.updater.download(release) { updateProgress = it } }
-            } catch (e: Exception) {
-                message = "Téléchargement de la mise à jour impossible : ${e.message}"
-            } finally {
-                updateProgress = null
-            }
-        }
-    }
-
-    fun installIntent(file: File): Intent = app.updater.installIntent(file)
 }
