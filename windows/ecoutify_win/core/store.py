@@ -17,6 +17,7 @@ import re
 import uuid
 from pathlib import Path
 
+from . import atomic
 from .models import Playlist, Track, normalize_url, video_id, watch_url
 
 FILE_RE = re.compile(r"^(?P<base>.*) \[(?P<id>[A-Za-z0-9_-]{11})\]\.(?P<ext>m4a|webm|opus|mp3|ogg|mp4|aac)$")
@@ -119,18 +120,16 @@ class Store:
             return []
         if self._playlists is None or mtime != self._playlists_mtime:
             try:
-                data = json.loads(self.playlists_file.read_text(encoding="utf-8"))
+                data = atomic.read_json(self.playlists_file) or []
                 self._playlists = [Playlist.from_json(o) for o in data]
-            except (OSError, ValueError, KeyError):
-                self._playlists = []
+            except (OSError, ValueError, KeyError, TypeError):
+                self._playlists = []  # unreadable: shown empty, and _save_playlists refuses to overwrite it
             self._playlists_mtime = mtime
         return list(self._playlists)
 
     def _save_playlists(self, playlists: list[Playlist]) -> None:
-        self.root.mkdir(parents=True, exist_ok=True)
-        tmp = self.playlists_file.with_suffix(".json.tmp")
-        tmp.write_text(json.dumps([p.to_json() for p in playlists], ensure_ascii=False), encoding="utf-8")
-        os.replace(tmp, self.playlists_file)
+        atomic.read_json(self.playlists_file)  # raises UnreadableFile rather than overwrite it
+        atomic.write_text(self.playlists_file, json.dumps([p.to_json() for p in playlists], ensure_ascii=False))
         self._playlists = None
 
     def _update(self, playlist_id: str, fn) -> None:

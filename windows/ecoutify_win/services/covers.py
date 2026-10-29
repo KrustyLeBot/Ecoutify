@@ -1,7 +1,6 @@
 """Cover images: shown from Ecoutify/covers/ (shared with the phone) or from a local cache, fetched when missing."""
 from __future__ import annotations
 
-import shutil
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
@@ -9,6 +8,7 @@ import requests
 from PySide6.QtCore import QObject, Qt, Signal
 from PySide6.QtGui import QPixmap
 
+from ..core import atomic
 from ..core.models import Track, video_id
 
 _UA = "Mozilla/5.0 (Windows NT 10.0; rv:128.0) Gecko/20100101 Firefox/128.0"
@@ -75,8 +75,7 @@ class Covers(QObject):
     def _fetch(self, track: Track, target: Path) -> None:
         data = fetch_cover(track)
         if data:
-            target.parent.mkdir(parents=True, exist_ok=True)
-            target.write_bytes(data)
+            atomic.write_bytes(target, data)
         else:
             self._failed.add(track.id)
         self._inflight.discard(track.id)
@@ -94,11 +93,7 @@ class Covers(QObject):
             if target is None or target.exists():
                 continue
             cached = self._cache_file(track)
-            target.parent.mkdir(parents=True, exist_ok=True)
-            if cached.exists():
-                shutil.copyfile(cached, target)
-            else:
-                data = fetch_cover(track)
-                if data:
-                    target.write_bytes(data)
+            data = cached.read_bytes() if cached.exists() else fetch_cover(track)
+            if data:
+                atomic.write_bytes(target, data)
         self.changed.emit()

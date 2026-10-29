@@ -8,6 +8,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 from PySide6.QtCore import QObject, Signal
 
+from ..core import atomic
 from ..core.models import Track
 
 
@@ -75,7 +76,12 @@ class DownloadManager(QObject):
         tmp = self.ctx.catalog.download_audio(track.url, self.ctx.cache_dir / "downloads", on_progress)
         final = store.file_for(track, tmp.suffix.lstrip(".") or "m4a")
         final.parent.mkdir(parents=True, exist_ok=True)
-        part = final.with_name(final.name + ".part")  # the phone ignores *.part while the sync is running
-        shutil.move(str(tmp), part)
-        os.replace(part, final)
+        # Copied next to the final file under a name Synchrotron never syncs, then renamed: atomic, even on SMB.
+        part = final.with_name(atomic.temp_name(final.name))
+        try:
+            shutil.move(str(tmp), part)
+            os.replace(part, final)
+        except BaseException:
+            part.unlink(missing_ok=True)
+            raise
         store.invalidate()

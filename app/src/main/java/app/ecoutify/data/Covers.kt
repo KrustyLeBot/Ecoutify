@@ -31,13 +31,9 @@ class Covers(private val store: Store, private val client: OkHttpClient) {
                 null
             }
             if (bytes == null || bytes.size < 1024) continue
-            target.parentFile?.mkdirs()
-            val part = File(target.parentFile, target.name + ".part")
-            part.writeBytes(bytes)
-            if (part.renameTo(target)) {
-                version.update { it + 1 }
-                return
-            }
+            AtomicFiles.write(target, bytes)
+            version.update { it + 1 }
+            return
         }
     }
 

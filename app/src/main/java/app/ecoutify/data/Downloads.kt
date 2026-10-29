@@ -71,7 +71,7 @@ class Downloads(
         runCatching { covers.save(track) }
         val (streamUrl, ext) = catalog.audioStream(track.url)
         val finalFile = store.fileFor(track, ext)
-        val partFile = File(finalFile.parentFile, finalFile.name + ".part")
+        val partFile = AtomicFiles.tempFor(finalFile)
         try {
             val request = Request.Builder().url(streamUrl).header("User-Agent", OkHttpDownloader.USER_AGENT).build()
             client.newCall(request).execute().use { resp ->
@@ -81,7 +81,7 @@ class Downloads(
                 var done = 0L
                 var lastPct = -1
                 body.byteStream().use { input ->
-                    partFile.outputStream().use { output ->
+                    java.io.FileOutputStream(partFile).use { output ->
                         val buf = ByteArray(64 * 1024)
                         while (true) {
                             val n = input.read(buf)
@@ -94,10 +94,14 @@ class Downloads(
                                 onProgress(pct)
                             }
                         }
+                        output.fd.sync()
                     }
                 }
             }
-            check(partFile.renameTo(finalFile)) { "Impossible d'enregistrer le fichier" }
+            java.nio.file.Files.move(
+                partFile.toPath(), finalFile.toPath(),
+                java.nio.file.StandardCopyOption.REPLACE_EXISTING, java.nio.file.StandardCopyOption.ATOMIC_MOVE,
+            )
         } catch (e: Throwable) {
             partFile.delete()
             throw e

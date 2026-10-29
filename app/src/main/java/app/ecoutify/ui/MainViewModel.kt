@@ -1,5 +1,6 @@
 package app.ecoutify.ui
 
+import app.ecoutify.data.UnreadableFileException
 import android.app.Application
 import android.net.ConnectivityManager
 import android.net.Network
@@ -133,7 +134,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private suspend fun reloadFromDisk(adopt: Boolean = false) {
-        withContext(Dispatchers.IO) { if (adopt) adoptOrphanDownloads() }
+        withContext(Dispatchers.IO) {
+            if (adopt) try { adoptOrphanDownloads() } catch (e: UnreadableFileException) { message = e.message }
+        }
         downloaded = app.store.downloads()
         playlists = app.store.playlists()
         ensureCovers()
@@ -161,7 +164,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                         if (state.changes > 0) message = "Bibliothèque synchronisée (${state.changes} changement${if (state.changes > 1) "s" else ""})"
                     }
                 }
-                is SyncState.Failed -> { syncing = false; message = "Échec de la synchro Proton Drive"; adoptLater() }
+                is SyncState.Failed -> { syncing = false; message = "Échec de la synchro"; adoptLater() }
                 SyncState.TimedOut -> { syncing = false; message = "Synchro longue : elle continue en arrière-plan" }
                 is SyncState.Skipped -> {
                     syncing = false
@@ -311,17 +314,29 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun isDownloaded(t: Track) = downloaded.any { it.url == t.url }
 
     // --- Playlists ---
+
+    /** Runs a playlist change; an unreadable playlists.json is shown, never overwritten. */
+    private inline fun editPlaylists(block: () -> Unit): Boolean = try {
+        block()
+        true
+    } catch (e: UnreadableFileException) {
+        message = e.message
+        false
+    }
+
     fun createPlaylist(name: String, thenAdd: Track? = null) {
         if (name.isBlank() || blockedBySync()) return
-        val p = app.store.createPlaylist(name)
-        thenAdd?.let { app.store.addToPlaylist(p.id, it) }
+        editPlaylists {
+            val p = app.store.createPlaylist(name)
+            thenAdd?.let { app.store.addToPlaylist(p.id, it) }
+        }
         playlists = app.store.playlists()
     }
 
     /** "Keep offline": download every track of the playlist automatically (on Wi-Fi), now and as it grows. */
     fun setKeepOffline(p: Playlist, on: Boolean) {
         if (blockedBySync()) return
-        app.store.setKeepOffline(p.id, on)
+        if (!editPlaylists { app.store.setKeepOffline(p.id, on) }) return
         playlists = app.store.playlists()
         if (on) {
             app.downloads.scheduleSync()
@@ -354,20 +369,20 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun renamePlaylist(p: Playlist, name: String) {
         if (name.isBlank() || blockedBySync()) return
-        app.store.renamePlaylist(p.id, name)
+        editPlaylists { app.store.renamePlaylist(p.id, name) }
         playlists = app.store.playlists()
     }
 
     fun deletePlaylist(p: Playlist) {
         if (blockedBySync()) return
-        app.store.deletePlaylist(p.id)
+        if (!editPlaylists { app.store.deletePlaylist(p.id) }) return
         playlists = app.store.playlists()
         p.tracks.forEach(::deleteIfInNoPlaylist)
     }
 
     fun addToPlaylist(p: Playlist, t: Track) {
         if (blockedBySync()) return
-        app.store.addToPlaylist(p.id, t)
+        if (!editPlaylists { app.store.addToPlaylist(p.id, t) }) return
         playlists = app.store.playlists()
         if (p.keepOffline) app.downloads.scheduleSync()
         message = "Ajouté à « ${p.name} »"
@@ -376,7 +391,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun removeFromPlaylist(p: Playlist, t: Track) {
         if (blockedBySync()) return
-        app.store.removeFromPlaylist(p.id, t)
+        if (!editPlaylists { app.store.removeFromPlaylist(p.id, t) }) return
         playlists = app.store.playlists()
         deleteIfInNoPlaylist(t)
     }

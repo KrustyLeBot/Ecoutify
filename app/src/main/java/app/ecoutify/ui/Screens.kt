@@ -121,7 +121,7 @@ fun EcoutifyScreen(vm: MainViewModel) {
             Column(Modifier.padding(padding).fillMaxSize()) {
                 if (!vm.storageOk) StorageBanner()
                 if (!vm.online) SuiteBanner("Seuls les titres téléchargés sont lisibles.", title = "Hors ligne", icon = Icons.Default.WifiOff)
-                if (vm.syncing) SuiteBanner("Playlists en lecture seule le temps de la synchro.", title = "Synchronisation avec Proton Drive", icon = Icons.Default.Sync, progress = -1f)
+                if (vm.syncing) SuiteBanner("Playlists en lecture seule le temps de la synchro.", title = "Synchronisation", icon = Icons.Default.Sync, progress = -1f)
                 UpdateBanner(vm.updates)
                 when (tab) {
                     Tab.Home -> HomeScreen(vm)

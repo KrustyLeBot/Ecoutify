@@ -7,6 +7,7 @@ from PySide6.QtCore import QFileSystemWatcher, QObject, QStandardPaths, QTimer, 
 from PySide6.QtNetwork import QNetworkInformation
 
 from .config import Config
+from .core import atomic
 from .core.catalog import Catalog
 from .core.localstate import LocalState
 from .core.models import Playlist, Track
@@ -86,33 +87,46 @@ class AppContext(QObject):
             self.covers.save_shared(tracks)
         self.downloads.sync_keep_offline()
 
-    def create_playlist(self, name: str, tracks=()) -> Playlist:
-        playlist = self.store.create_playlist(name, tracks)
+    def _edit(self, change) -> bool:
+        """Runs a playlist change; an unreadable playlists.json is reported, never overwritten."""
+        try:
+            change()
+            return True
+        except atomic.UnreadableFile as e:
+            self.message.emit(str(e))
+            return False
+
+    def create_playlist(self, name: str, tracks=()) -> Playlist | None:
+        created = []
+        if not self._edit(lambda: created.append(self.store.create_playlist(name, tracks))):
+            return None
         self._changed(tracks)
-        return playlist
+        return created[0]
 
     def rename_playlist(self, playlist: Playlist, name: str) -> None:
-        self.store.rename_playlist(playlist.id, name)
-        self._changed()
+        if self._edit(lambda: self.store.rename_playlist(playlist.id, name)):
+            self._changed()
 
     def delete_playlist(self, playlist: Playlist) -> None:
-        self.store.delete_playlist(playlist.id)
+        if not self._edit(lambda: self.store.delete_playlist(playlist.id)):
+            return
         for track in playlist.tracks:
             self._free_if_orphan(track)
         self._changed()
 
     def add_to_playlist(self, playlist: Playlist, track: Track) -> None:
-        self.store.add_to_playlist(playlist.id, track)
-        self._changed([track])
+        if self._edit(lambda: self.store.add_to_playlist(playlist.id, track)):
+            self._changed([track])
 
     def remove_from_playlist(self, playlist: Playlist, track: Track) -> None:
-        self.store.remove_from_playlist(playlist.id, track)
+        if not self._edit(lambda: self.store.remove_from_playlist(playlist.id, track)):
+            return
         self._free_if_orphan(track)
         self._changed()
 
     def set_keep_offline(self, playlist: Playlist, on: bool) -> None:
-        self.store.set_keep_offline(playlist.id, on)
-        self._changed()
+        if self._edit(lambda: self.store.set_keep_offline(playlist.id, on)):
+            self._changed()
 
     def _free_if_orphan(self, track: Track) -> None:
         """Downloads only exist for tracks in a playlist: free the files once no playlist has the track."""

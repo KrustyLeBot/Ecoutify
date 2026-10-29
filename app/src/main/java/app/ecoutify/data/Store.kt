@@ -99,7 +99,7 @@ class Store(private val context: Context) {
         return (musicDir.listFiles() ?: emptyArray()).firstOrNull { fileId(it) == id }
     }
 
-    /** Destination file for [t] (written as `.part` first, renamed once complete). */
+    /** Destination file for [t] (written as a `.synctmp-` temporary first, renamed once complete). */
     fun fileFor(t: Track, ext: String): File {
         val id = videoId(t.url) ?: error("URL inconnue")
         fun clean(x: String) = x.replace(Regex("[\\\\/:*?\"<>|\\n\\r]"), "_").replace(" - ", " ").trim()
@@ -127,9 +127,9 @@ class Store(private val context: Context) {
     }
 
     // --- Playlists ---
+    /** An unreadable playlists.json reads as empty here, but [savePlaylists] refuses to overwrite it. */
     fun playlists(): List<Playlist> {
-        val text = runCatching { playlistsFile.readText() }.getOrDefault("[]")
-        val arr = runCatching { JSONArray(text) }.getOrDefault(JSONArray())
+        val arr = runCatching { AtomicFiles.read(playlistsFile) { JSONArray(it) } }.getOrNull() ?: JSONArray()
         return (0 until arr.length()).map {
             val o = arr.getJSONObject(it)
             val tracks = o.getJSONArray("tracks")
@@ -150,9 +150,8 @@ class Store(private val context: Context) {
                     .put("tracks", JSONArray().also { a -> p.tracks.forEach { a.put(it.toJson()) } })
             )
         }
-        val tmp = File(playlistsFile.parentFile, "playlists.json.tmp")
-        tmp.writeText(arr.toString())
-        tmp.renameTo(playlistsFile)
+        AtomicFiles.read(playlistsFile) { JSONArray(it) } // throws when the current file is unreadable
+        AtomicFiles.write(playlistsFile, arr.toString())
     }
 
     fun createPlaylist(name: String): Playlist {

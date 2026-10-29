@@ -199,7 +199,9 @@ class LibraryPage(QWidget):
     def _new(self) -> None:
         name, ok = QInputDialog.getText(self, "Nouvelle playlist", "Nom :")
         if ok and name.strip():
-            self.selected_id = self.ctx.create_playlist(name).id
+            created = self.ctx.create_playlist(name)
+            if created is not None:
+                self.selected_id = created.id
             self.reload()
 
     def _import(self) -> None:
