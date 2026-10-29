@@ -1,6 +1,7 @@
 """Everything the screens share: the folder store, the catalog, covers, downloads, the player and the playlist actions."""
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 from PySide6.QtCore import QFileSystemWatcher, QObject, QStandardPaths, QTimer, Signal
@@ -47,6 +48,29 @@ class AppContext(QObject):
         self.downloads.finished.connect(lambda _: self.library_changed.emit())
         self.downloads.failed.connect(lambda url, msg: self.message.emit(f"Téléchargement impossible : {msg}"))
         self._watch()
+        # Over the server's SMB share Windows does not always report changes: also look every 30 s
+        # (and when the window comes back to the front, see poll_disk).
+        self._snapshot = self._take_snapshot()
+        self._poll = QTimer(self)
+        self._poll.setInterval(30_000)
+        self._poll.timeout.connect(self.poll_disk)
+        self._poll.start()
+
+    def _take_snapshot(self):
+        """Names, times and sizes of the playlists file and of the music / covers folders; None if unreadable."""
+        try:
+            entries = [self.store.playlists_file] if self.store.playlists_file.exists() else []
+            for folder in (self.store.music_dir, self.store.covers_dir):
+                if folder.is_dir():
+                    entries += [Path(e.path) for e in os.scandir(folder) if not e.name.startswith(".")]
+            return tuple(sorted((str(p), p.stat().st_mtime_ns, p.stat().st_size) for p in entries))
+        except OSError:
+            return None
+
+    def poll_disk(self) -> None:
+        snapshot = self._take_snapshot()
+        if snapshot is not None and snapshot != self._snapshot:
+            self._debounce.start()
 
     # --- folder ---
     def set_workdir(self, path: Path) -> None:
@@ -56,6 +80,7 @@ class AppContext(QObject):
         self.store.ensure_dirs()
         self.player.stop()
         self._watch()
+        self._snapshot = self._take_snapshot()
         self.library_changed.emit()
         self.downloads.sync_keep_offline()
 
@@ -69,6 +94,7 @@ class AppContext(QObject):
 
     def _disk_changed(self) -> None:
         """Something changed in the folder (e.g. the sync brought the phone's changes): reload everything."""
+        self._snapshot = self._take_snapshot()
         self.store.invalidate()
         self._watch()  # an atomically replaced file loses its watch
         self.library_changed.emit()
@@ -80,6 +106,7 @@ class AppContext(QObject):
 
     # --- playlist actions (the same rules as on Android) ---
     def _changed(self, tracks=()) -> None:
+        self._snapshot = self._take_snapshot()
         self.store.invalidate()
         self._watch()
         self.library_changed.emit()

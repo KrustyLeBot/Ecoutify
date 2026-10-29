@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from PySide6.QtCore import QTimer
+from PySide6.QtCore import QEvent, QTimer
 from PySide6.QtWidgets import (QApplication, QFileDialog, QHBoxLayout, QListWidget, QMainWindow, QMessageBox,
                                QStackedWidget, QVBoxLayout, QWidget)
 
@@ -15,6 +15,11 @@ from .update_toast import UpdateToast
 
 
 class MainWindow(QMainWindow):
+    def changeEvent(self, event) -> None:
+        super().changeEvent(event)
+        if event.type() == QEvent.Type.ActivationChange and self.isActiveWindow():
+            self.ctx.poll_disk()  # back to the front: the phone may have changed the files meanwhile
+
     def __init__(self, ctx):
         super().__init__()
         self.ctx = ctx
