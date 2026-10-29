@@ -57,13 +57,23 @@ class AppContext(QObject):
         self._poll.start()
 
     def _take_snapshot(self):
-        """Names, times and sizes of the playlists file and of the music / covers folders; None if unreadable."""
+        """The playlists file's time and size, and the names in the music / covers folders (tracks and covers
+        are only added or removed, never edited); None if unreadable. One listing per folder: on the server's
+        share a stat per music file would mean one network round trip each and freeze the window."""
         try:
-            entries = [self.store.playlists_file] if self.store.playlists_file.exists() else []
+            try:
+                st = self.store.playlists_file.stat()
+                playlists = (st.st_mtime_ns, st.st_size)
+            except FileNotFoundError:
+                playlists = None
+            names = []
             for folder in (self.store.music_dir, self.store.covers_dir):
-                if folder.is_dir():
-                    entries += [Path(e.path) for e in os.scandir(folder) if not e.name.startswith(".")]
-            return tuple(sorted((str(p), p.stat().st_mtime_ns, p.stat().st_size) for p in entries))
+                try:
+                    with os.scandir(folder) as it:
+                        names.append(frozenset(e.name for e in it if not e.name.startswith(".")))
+                except FileNotFoundError:
+                    names.append(frozenset())
+            return playlists, tuple(names)
         except OSError:
             return None
 
