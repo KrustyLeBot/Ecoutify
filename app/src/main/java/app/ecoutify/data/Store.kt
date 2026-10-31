@@ -13,15 +13,16 @@ import java.util.UUID
 /**
  * Everything is local (no account).
  *
- * Music and playlists live in the public `Ecoutify/` folder of internal storage (at the root,
- * not in "Music"): it survives uninstalling and everything in it is detected again after a
+ * Music and playlists live in the public `Documents/Ecoutify/` folder, next to the other apps of the
+ * suite (before, it was `Ecoutify/` at the root of the storage: [hasLegacyLibrary] / [importLegacyLibrary]
+ * move it over). It survives uninstalling and everything in it is detected again after a
  * reinstall. This requires the "all files access" permission; until it is granted a private
  * folder is used, and its content is moved over once permission is given.
  *
- * - `Ecoutify/music/<artist> - <title> [<YouTube id>].m4a`: one file per downloaded track;
+ * - `music/<artist> - <title> [<YouTube id>].m4a`: one file per downloaded track;
  *   artist, title and id are read back from the file name.
- * - `Ecoutify/covers/<YouTube id>.jpg`: cover images (so they are available offline and after a reinstall);
- * - `Ecoutify/playlists.json`: the playlists.
+ * - `covers/<YouTube id>.jpg`: cover images (so they are available offline and after a reinstall);
+ * - `playlists.json`: the playlists.
  */
 class Store(private val context: Context) {
     private val prefs = context.getSharedPreferences("ecoutify", Context.MODE_PRIVATE)
@@ -30,6 +31,10 @@ class Store(private val context: Context) {
         get() = File(context.getExternalFilesDir(null) ?: context.filesDir, "Ecoutify")
 
     private val publicRoot: File
+        get() = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOCUMENTS), "Ecoutify")
+
+    /** Where the library lived before it moved into Documents: the root of the storage. */
+    private val legacyRoot: File
         get() = File(Environment.getExternalStorageDirectory(), "Ecoutify")
 
     /** Folder that Synchrotron syncs with Proton Drive (only meaningful with [hasStorageAccess]). */
@@ -73,6 +78,56 @@ class Store(private val context: Context) {
             if (privatePlaylists.exists() && !playlistsFile.exists()) privatePlaylists.copyTo(playlistsFile)
             privatePlaylists.delete()
         }
+    }
+
+    /** Is there a library in the old `Ecoutify/` folder at the root of the storage? */
+    fun hasLegacyLibrary(): Boolean = hasStorageAccess() && legacyRoot.isDirectory &&
+        legacyRoot.canonicalPath != publicRoot.canonicalPath &&
+        (File(legacyRoot, "playlists.json").isFile || File(legacyRoot, "music").list().orEmpty().isNotEmpty() ||
+            File(legacyRoot, "covers").list().orEmpty().isNotEmpty())
+
+    val legacyPath: String get() = legacyRoot.path
+
+    /**
+     * Moves the old folder's music, covers and playlists into `Documents/Ecoutify`. Files already there are kept
+     * (the old copy is left in place when it differs), playlists are merged by id and by track, and the old
+     * folder is removed once empty. Returns the number of files moved.
+     */
+    fun importLegacyLibrary(): Int {
+        if (!hasLegacyLibrary()) return 0
+        var moved = 0
+        fun move(from: File, to: File): Boolean {
+            if (to.exists()) {
+                if (to.length() == from.length()) { from.delete(); return false } // same file, already there
+                return false
+            }
+            to.parentFile?.mkdirs()
+            if (!from.renameTo(to)) { from.copyTo(to); from.delete() }
+            return true
+        }
+        for (dir in listOf("music", "covers")) {
+            File(legacyRoot, dir).listFiles()?.forEach { f ->
+                if (f.isFile && !f.name.startsWith(".") && move(f, File(root, "$dir/${f.name}"))) moved++
+            }
+        }
+        val old = File(legacyRoot, "playlists.json")
+        if (old.isFile) {
+            val legacy = runCatching { readPlaylists(old) }.getOrNull()
+            if (legacy != null) {
+                val current = playlists()
+                val merged = current.map { c ->
+                    val l = legacy.firstOrNull { it.id == c.id } ?: return@map c
+                    c.copy(tracks = c.tracks + l.tracks.filter { t -> c.tracks.none { it.url == t.url } })
+                } + legacy.filter { l -> current.none { it.id == l.id } }
+                savePlaylists(merged)
+                old.delete()
+                moved++
+            }
+        }
+        // Remove what is left only if it is empty: never delete anything unexpected.
+        for (dir in listOf("music", "covers")) File(legacyRoot, dir).takeIf { it.isDirectory && it.list().isNullOrEmpty() }?.delete()
+        legacyRoot.takeIf { it.isDirectory && it.list().isNullOrEmpty() }?.delete()
+        return moved
     }
 
     // --- History ---
@@ -128,8 +183,10 @@ class Store(private val context: Context) {
 
     // --- Playlists ---
     /** An unreadable playlists.json reads as empty here, but [savePlaylists] refuses to overwrite it. */
-    fun playlists(): List<Playlist> {
-        val arr = runCatching { AtomicFiles.read(playlistsFile) { JSONArray(it) } }.getOrNull() ?: JSONArray()
+    fun playlists(): List<Playlist> = runCatching { readPlaylists(playlistsFile) }.getOrNull() ?: emptyList()
+
+    private fun readPlaylists(file: File): List<Playlist> {
+        val arr = AtomicFiles.read(file) { JSONArray(it) } ?: JSONArray()
         return (0 until arr.length()).map {
             val o = arr.getJSONObject(it)
             val tracks = o.getJSONArray("tracks")

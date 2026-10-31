@@ -4,6 +4,9 @@ import app.ecoutify.suite.AboutSettings
 import app.ecoutify.suite.ConfirmDialog
 import app.ecoutify.suite.SuiteBanner
 import app.ecoutify.suite.SuiteTopBar
+import app.ecoutify.suite.SectionTitle
+import app.ecoutify.suite.SettingsCard
+import app.ecoutify.suite.SettingsHint
 import app.ecoutify.suite.SyncSettings
 import app.ecoutify.suite.Tone
 import app.ecoutify.suite.UpdateBanner
@@ -167,6 +170,19 @@ private fun SettingsScreen(vm: MainViewModel, onBack: () -> Unit) {
     Scaffold(topBar = { SuiteTopBar("Paramètres", onBack = onBack) }) { padding ->
         Column(Modifier.padding(padding).fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp)) {
             SyncSettings(vm.syncFolder)
+            if (vm.legacyFound) {
+                SectionTitle("Bibliothèque")
+                SettingsCard {
+                    Text("Ancien dossier trouvé", fontWeight = FontWeight.SemiBold)
+                    SettingsHint(vm.legacyPath)
+                    SettingsHint(
+                        "Ecoutify range désormais sa bibliothèque dans Documents/Ecoutify, comme les autres applications. " +
+                            "Déplace-y la musique, les pochettes et les playlists de l'ancien dossier (rien n'est écrasé). " +
+                            "Pense ensuite à pointer la synchro Synchrotron sur le nouveau dossier.",
+                    )
+                    Button(onClick = vm::importLegacy) { Text("Déplacer dans Documents/Ecoutify") }
+                }
+            }
             UpdateSettings(vm.updates)
             AboutSettings(
                 "Ecoutify",

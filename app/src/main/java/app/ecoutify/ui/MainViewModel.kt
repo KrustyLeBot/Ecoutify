@@ -56,6 +56,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     val updates = SuiteUpdates(app, app.updater, viewModelScope)
     val syncFolder: String get() = app.store.syncPath
+    val legacyPath: String get() = app.store.legacyPath
     private var coverJob: Job? = null
     private var runningDownloads = emptyMap<String, Int>()
     private var queuedDownloads = emptySet<String>()
@@ -124,11 +125,35 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    /** A library is still in the old `Ecoutify/` folder at the storage root (before the move into Documents). */
+    var legacyFound by mutableStateOf(false)
+        private set
+    private var legacyAnnounced = false
+
     /** Call when the app comes back to the foreground: picks up the all-files-access permission. */
     fun refreshStorage() {
         storageOk = app.store.hasStorageAccess()
         viewModelScope.launch {
             withContext(Dispatchers.IO) { app.store.migratePrivateToPublic() }
+            legacyFound = withContext(Dispatchers.IO) { app.store.hasLegacyLibrary() }
+            if (legacyFound && !legacyAnnounced) {
+                legacyAnnounced = true
+                message = "Ta bibliothèque est dans l'ancien dossier Ecoutify : Paramètres → Bibliothèque pour la déplacer dans Documents."
+            }
+            reloadFromDisk()
+        }
+    }
+
+    /** Moves the old folder's music, covers and playlists into Documents/Ecoutify (nothing is lost, nothing is overwritten). */
+    fun importLegacy() {
+        viewModelScope.launch {
+            try {
+                val moved = withContext(Dispatchers.IO) { app.store.importLegacyLibrary() }
+                legacyFound = withContext(Dispatchers.IO) { app.store.hasLegacyLibrary() }
+                message = "Bibliothèque déplacée : $moved élément${if (moved > 1) "s" else ""}"
+            } catch (e: Exception) {
+                message = "Déplacement impossible : ${e.message}"
+            }
             reloadFromDisk()
         }
     }
